@@ -140,6 +140,34 @@ const STRATEGIES = [
     grad:"linear-gradient(145deg,#1a0030,#4c1d95)", border:"#a855f7", tag:"#e9d5ff", tagText:"#4c1d95", col:"#c084fc" },
 ];
 
+const parseCapitalImpact = (value: string) => {
+  const match = value.match(/([+-−])\s*([\d.]+)/);
+  if (!match) return 0;
+  const sign = match[1] === "−" || match[1] === "-" ? -1 : 1;
+  return sign * Number(match[2]);
+};
+
+const CAPITAL_PER_VALUE = 5;
+
+const getStrategyValueDelta = (id: string) =>
+  id === "balanced" ? 2 : id === "aggressive" ? 4 : 1;
+
+const getStrategyCapitalDelta = (id: string) =>
+  getStrategyValueDelta(id) * CAPITAL_PER_VALUE;
+
+const getEventImpactForStrategy = (strategy: string | null, eventIdx: number) => {
+  const strategyLabel: Record<string, string> = {
+    conservative: "🛡 Safe Choice",
+    balanced: "⚖️ Balanced Choice",
+    aggressive: "🚀 Risky Choice",
+  };
+  const ev = EVENTS[eventIdx];
+  if (!ev) return 0;
+  const impact = ev.impact.find((item) => item.label === strategyLabel[strategy ?? ""]);
+  if (!impact || !impact.val.includes("Capital")) return 0;
+  return parseCapitalImpact(impact.val);
+};
+
 // ─── Data: Events ─────────────────────────────────────────────────────────────
 const EVENTS = [
   { emoji:"🎯", name:"Excellent Underwriting Year",
@@ -630,7 +658,7 @@ const TutorialScreen = ({onStart}:{onStart:()=>void}) => (
 );
 
 // ─── Screen: Round Intro ──────────────────────────────────────────────────────
-const RoundIntroScreen = ({round,viewMode,onNext}:{round:number;viewMode:ViewMode;onNext:()=>void}) => (
+const RoundIntroScreen = ({round,viewMode,onNext,playerCapital,playerValue}:{round:number;viewMode:ViewMode;onNext:()=>void;playerCapital:number;playerValue:number}) => (
   <div onClick={onNext} style={{minHeight:"100vh",background:"#0d1117",display:"flex",flexDirection:"column",
     alignItems:"center",justifyContent:"center",fontFamily:F,cursor:"pointer",padding:"40px"}}>
     <div className="zi" style={{textAlign:"center"}}>
@@ -652,7 +680,7 @@ const RoundIntroScreen = ({round,viewMode,onNext}:{round:number;viewMode:ViewMod
           border:"1px solid #30363d",display:"inline-block"}}>
           <p style={{color:"#e2e8f0",fontSize:"11px",fontWeight:700,letterSpacing:"0.1em",marginBottom:"10px"}}>APEX SHIELD — GOING INTO ROUND {round}</p>
           <div style={{display:"flex",gap:"20px",justifyContent:"center"}}>
-            {([["📈","Value",P_STATS[round-1].value],["💰","Capital",P_STATS[round-1].capital],
+            {([["📈","Value",playerValue],["💰","Capital",playerCapital],
                ["🛡","Min. Req.",P_STATS[round-1].rbc],["⭐","Rep.",P_STATS[round-1].rep]] as [string,string,number][]).map(([ico,lbl,val])=>(
               <div key={lbl} style={{textAlign:"center"}}>
                 <div style={{fontSize:"20px"}}>{ico}</div>
@@ -773,14 +801,22 @@ const DecisionPlayerScreen = ({round,chosen,onChoose}:{round:number;chosen:strin
 };
 
 // ─── Screen: Event Reveal ─────────────────────────────────────────────────────
-const EventScreen = ({eventIdx,onNext}:{eventIdx:number;onNext:()=>void}) => {
+const EventScreen = ({eventIdx, strategy, impactDelta, onApplyImpact, onNext}:{eventIdx:number; strategy:string|null; impactDelta:number; onApplyImpact:(delta:number)=>void; onNext:()=>void}) => {
   const ev = EVENTS[eventIdx];
   const [phase,setPhase] = useState(0);
+  const [impactApplied,setImpactApplied] = useState(false);
   useEffect(()=>{
     const t1=setTimeout(()=>setPhase(1),600);
     const t2=setTimeout(()=>setPhase(2),1600);
     return()=>{clearTimeout(t1);clearTimeout(t2);};
   },[]);
+
+  useEffect(() => {
+    if (phase >= 1 && !impactApplied) {
+      onApplyImpact(impactDelta);
+      setImpactApplied(true);
+    }
+  }, [phase, impactApplied, impactDelta, onApplyImpact]);
   return (
     <div onClick={onNext} style={{minHeight:"100vh",background:ev.bg,display:"flex",flexDirection:"column",
       alignItems:"center",justifyContent:"flex-start",fontFamily:F,padding:"40px 24px 80px",cursor:"pointer"}}>
@@ -821,8 +857,10 @@ const EventScreen = ({eventIdx,onNext}:{eventIdx:number;onNext:()=>void}) => {
                 <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",
                   background:"rgba(255,255,255,.05)",borderRadius:"10px",padding:"10px 14px"}}>
                   <span style={{fontWeight:700,fontSize:"14px",color:"#f8fafc"}}>{r.label}</span>
-                  <span style={{fontFamily:M,fontWeight:500,fontSize:"15px",
-                    color:r.good?"#4ade80":"#f87171"}}>{r.val}</span>
+                  <span className={parseCapitalImpact(r.val) >= 0 ? "text-emerald-600 dark:text-emerald-400 font-bold" : "text-red-600 font-bold"}
+                    style={{fontFamily:M,fontWeight:700,fontSize:"15px"}}>
+                    {parseCapitalImpact(r.val) >= 0 ? "+" : ""}{r.val.replace(/[+−]/,"")}
+                  </span>
                 </div>
               ))}
             </div>
@@ -880,8 +918,8 @@ const RBCHostScreen = ({round}:{round:number}) => {
 };
 
 // ─── Screen: RBC — Player ─────────────────────────────────────────────────────
-const RBCPlayerScreen = ({round}:{round:number}) => {
-  const s = P_STATS[round];
+const RBCPlayerScreen = ({round,playerCapital,playerValue}:{round:number;playerCapital:number;playerValue:number}) => {
+  const s = { ...P_STATS[round], capital: playerCapital, value: playerValue };
   const status = statusOf(s.capital, s.rbc);
   const {emoji,label,col,bg,desc} = hi(status);
   const msgs: Record<RBCStatus,{body:string}> = {
@@ -1322,6 +1360,8 @@ export default function App() {
   const [roomStatus,  setRoomStatus]  = useState<KVRoomStatus>("waiting");
   const [currentRound, setCurrentRound] = useState(1);
   const [syncedRound, setSyncedRound] = useState(1);
+  const [playerCapital, setPlayerCapital] = useState(100);
+  const [playerValue, setPlayerValue] = useState(0);
   const [isHost,      setIsHost]      = useState(false);
   const [lobbyError,  setLobbyError]  = useState<string | null>(null);
   const [isBusy,      setIsBusy]      = useState(false);
@@ -1397,6 +1437,8 @@ export default function App() {
       setRoleLocked(true);
       setRoomStatus("waiting");
       setPlayers([{ id: "host", name: name.trim() }]);
+      setPlayerCapital(100);
+      setPlayerValue(0);
       setStepIdx(STEPS.findIndex(item => item.id === "host-lobby"));
     } catch (error) {
       console.log("handleHost error", error);
@@ -1427,6 +1469,8 @@ export default function App() {
       setIsHost(false);
       setRoleLocked(true);
       setRoomStatus("waiting");
+      setPlayerCapital(100);
+      setPlayerValue(0);
       setStepIdx(STEPS.findIndex(item => item.id === "player-lobby"));
     } catch (error) {
       setLobbyError((error as Error).message);
@@ -1474,11 +1518,30 @@ export default function App() {
   };
 
   const handleStrategy = (id:string) => {
+    const previousCapital = playerCapital;
+    const valueDelta = getStrategyValueDelta(id);
+    const capitalDelta = getStrategyCapitalDelta(id);
+    const nextCapital = previousCapital + capitalDelta;
+
+    console.log("--- ENGINE MATH DICTIONARY ---");
+    console.log("Previous Capital:", previousCapital);
+    console.log("Choice Multiplier / Delta:", { choice:id, valueDelta, capitalDelta });
+    console.log("New Capital Computed:", nextCapital);
+
+    setPlayerCapital(nextCapital);
+    setPlayerValue((prev) => prev + valueDelta);
+
     const ri=(step.round??1)-1;
     setChoices(prev=>{const n=[...prev];n[ri]=id;return n;});
     setTimeout(advance,700);
   };
   const handleOrsa = (id:string) => {
+    const previousCapital = playerCapital;
+    console.log("--- ENGINE MATH DICTIONARY ---");
+    console.log("Previous Capital:", previousCapital);
+    console.log("Choice Multiplier / Delta:", { orsaChoice:id, capitalDelta:0 });
+    console.log("New Capital Computed:", previousCapital);
+
     const ri=(step.round??1)-1;
     setOrsa(prev=>{const n=[...prev];n[ri]=id;return n;});
     setTimeout(advance,1300);
@@ -1504,16 +1567,26 @@ export default function App() {
       case "host-lobby":   return <HostLobbyScreen roomCode={roomCode} players={players} onStart={handleStart} error={lobbyError}/>;
       case "player-lobby": return <PlayerLobbyScreen roomCode={roomCode} companyName={companyName} players={players} started={roomStatus === "started"}/>;
       case "tutorial":     return <TutorialScreen onStart={advance}/>;
-      case "round-intro":  return <RoundIntroScreen round={r} viewMode={selectedViewMode} onNext={advance}/>;
+      case "round-intro":  return <RoundIntroScreen round={r} viewMode={selectedViewMode} playerCapital={playerCapital} playerValue={playerValue} onNext={advance}/>;
       case "decision":
         return selectedViewMode==="host"
           ? <DecisionHostScreen round={r} playerCount={players.length}/>
           : <DecisionPlayerScreen round={r} chosen={choices[ri]} onChoose={handleStrategy}/>;
-      case "event":        return <EventScreen eventIdx={ev} onNext={advance}/>;
+      case "event":        return <EventScreen eventIdx={ev} strategy={choices[ri]} impactDelta={getEventImpactForStrategy(choices[ri], ev)} onApplyImpact={(delta:number)=>{
+          if (!delta) return;
+          setPlayerCapital((prev) => {
+            const next = prev + delta;
+            console.log("--- ENGINE MATH DICTIONARY ---");
+            console.log("Previous Capital:", prev);
+            console.log("Choice Multiplier / Delta:", { eventIdx: ev, delta });
+            console.log("New Capital Computed:", next);
+            return next;
+          });
+        }} onNext={advance}/>;
       case "rbc":
         return selectedViewMode==="host"
           ? <RBCHostScreen round={r}/>
-          : <RBCPlayerScreen round={r}/>;
+          : <RBCPlayerScreen round={r} playerCapital={playerCapital} playerValue={playerValue}/>;
       case "orsa":         return <ORSAScreen round={r} viewMode={selectedViewMode} chosen={orsa[ri]} onChoose={handleOrsa}/>;
       case "leaderboard":  return <LeaderboardScreen round={r} viewMode={selectedViewMode} companyName={companyName}/>;
       case "final":        return <FinalScreen viewMode={selectedViewMode} choices={choices}/>;
