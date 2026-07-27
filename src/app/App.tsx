@@ -427,7 +427,7 @@ const ErrorOverlay = ({message,onClose}:{message:string;onClose:()=>void}) => (
 
 const HomeScreen = ({onHost,onJoin,isBusy,roleLocked}:{onHost:(name:string)=>void;onJoin:(code:string,name:string)=>void;isBusy:boolean;roleLocked:boolean}) => {
   const [code,setCode]=useState("");
-  const [name,setName]=useState("Apex Shield");
+  const [name,setName]=useState("");
   return (
     <div style={{minHeight:"100vh",background:"#f0f4ff",display:"flex",flexDirection:"column",
       alignItems:"center",justifyContent:"center",padding:"40px 24px",fontFamily:F}}>
@@ -441,13 +441,13 @@ const HomeScreen = ({onHost,onJoin,isBusy,roleLocked}:{onHost:(name:string)=>voi
           Insurance ALM Simulation
         </p>
 
-<button onClick={()=>!isBusy&&!roleLocked&&onHost(name.trim()||"Apex Shield")} disabled={isBusy || roleLocked} style={{
+<button onClick={()=>!isBusy&&!roleLocked&&name.trim()&&onHost(name.trim())} disabled={isBusy || roleLocked || !name.trim()} style={{
             fontFamily:F,fontWeight:800,fontSize:"20px",padding:"20px 0",borderRadius:"18px",
-            border:"none",cursor:isBusy || roleLocked?"not-allowed":"pointer",width:"100%",
-            background:isBusy || roleLocked?"#6d7cff":"linear-gradient(135deg,#4f46e5,#7c3aed)",color:"#fff",
-            boxShadow:isBusy || roleLocked?"none":"0 8px 32px rgba(79,70,229,.35)",marginBottom:"24px",
+            border:"none",cursor:isBusy || roleLocked || !name.trim()?"not-allowed":"pointer",width:"100%",
+            background:isBusy || roleLocked || !name.trim()?"#6d7cff":"linear-gradient(135deg,#4f46e5,#7c3aed)",color:"#fff",
+            boxShadow:isBusy || roleLocked || !name.trim()?"none":"0 8px 32px rgba(79,70,229,.35)",marginBottom:"24px",
             transition:"transform .15s"}}
-            onMouseEnter={e=>{if(!isBusy && !roleLocked)(e.currentTarget as HTMLElement).style.transform="translateY(-2px)"}}
+            onMouseEnter={e=>{if(!isBusy && !roleLocked && name.trim())(e.currentTarget as HTMLElement).style.transform="translateY(-2px)"}}
           onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.transform=""}}>
           Host a Game
         </button>
@@ -465,11 +465,11 @@ const HomeScreen = ({onHost,onJoin,isBusy,roleLocked}:{onHost:(name:string)=>voi
               padding:"14px",borderRadius:"12px",border:"2px solid #c7d2fe",
               background:"#fff",color:"#1e1b4b",outline:"none",boxSizing:"border-box",width:"100%"}}/>
           <input value={name} onChange={e=>setName(e.target.value)}
-            placeholder="Your nickname" style={{
+            placeholder="Enter your nickname..." style={{
               fontFamily:F,fontSize:"16px",fontWeight:700,
               padding:"13px",borderRadius:"12px",border:"2px solid #c7d2fe",
               background:"#fff",color:"#1e1b4b",outline:"none",boxSizing:"border-box",width:"100%"}}/>
-          <button onClick={()=>!isBusy&&!roleLocked&&onJoin(code.trim().toUpperCase(), name.trim()||"Apex Shield")} disabled={isBusy || roleLocked} style={{
+          <button onClick={()=>!isBusy&&!roleLocked&&onJoin(code.trim().toUpperCase(), name.trim())} disabled={isBusy || roleLocked || !name.trim()} style={{
             fontFamily:F,fontWeight:800,fontSize:"17px",padding:"15px",borderRadius:"13px",
             cursor:isBusy || roleLocked?"not-allowed":"pointer",
             background:isBusy || roleLocked?"#f8fbff":"#fff",color:"#4f46e5",border:"2px solid #c7d2fe",
@@ -506,7 +506,7 @@ const HostLobbyScreen = ({
           <div style={{fontFamily:M,fontSize:"clamp(52px,12vw,84px)",fontWeight:500,letterSpacing:"0.2em",color:"#818cf8",lineHeight:1,marginBottom:"12px"}}>
             {roomCode}
           </div>
-          <p style={{fontSize:"13px",color:"#e2e8f0"}}>lifeco.game → Enter this code to join</p>
+          <p style={{fontSize:"13px",color:"#e2e8f0"}}>Go to our website and enter this code to join:</p>
         </div>
         <p style={{fontSize:"20px",fontWeight:800,marginBottom:"18px",color:"#c7d2fe"}}>
           {players.length} players connected
@@ -1304,7 +1304,7 @@ export default function App() {
   const [roleLocked,  setRoleLocked]  = useState(false);
   const [choices,     setChoices]     = useState<(string|null)[]>(Array(5).fill(null));
   const [orsa,        setOrsa]        = useState<(string|null)[]>(Array(5).fill(null));
-  const [companyName, setCompanyName] = useState("Apex Shield");
+  const [companyName, setCompanyName] = useState("");
   const [roomCode,    setRoomCode]    = useState("");
   const [players,     setPlayers]     = useState<LobbyPlayer[]>([]);
   const [roomStatus,  setRoomStatus]  = useState<KVRoomStatus>("waiting");
@@ -1346,20 +1346,24 @@ export default function App() {
 
   const handleHost = async (name: string) => {
     if (isBusy) return;
+    if (!name.trim()) {
+      setLobbyError("Please enter a nickname before hosting.");
+      return;
+    }
     setLobbyError(null);
     setIsBusy(true);
     const code = normalizeRoomCode(generateRoomCode(4));
     console.log("handleHost start", { name, code });
     try {
-      const result = await createRoomInKV(code, name);
+      const result = await createRoomInKV(code, name.trim());
       console.log("handleHost success", { result });
-      setCompanyName(name);
+      setCompanyName(name.trim());
       setRoomCode(code);
       setViewMode("host");
       setIsHost(true);
       setRoleLocked(true);
       setRoomStatus("waiting");
-      setPlayers([{ id: "host", name }]);
+      setPlayers([{ id: "host", name: name.trim() }]);
       setStepIdx(STEPS.findIndex(item => item.id === "host-lobby"));
     } catch (error) {
       console.log("handleHost error", error);
@@ -1373,6 +1377,10 @@ export default function App() {
     if (isBusy) return;
     if (!code || code.length !== 4) {
       setLobbyError("Please enter a valid 4-letter room code to join.");
+      return;
+    }
+    if (!name.trim()) {
+      setLobbyError("Please enter a nickname before joining.");
       return;
     }
 
@@ -1399,8 +1407,13 @@ export default function App() {
     setLobbyError(null);
     setIsBusy(true);
     try {
-      await startRoomInKV(roomCode);
-      setRoomStatus("started");
+      const result = await startRoomInKV(roomCode);
+      console.log("handleStart result", result);
+      if (result?.success) {
+        setRoomStatus("started");
+      } else {
+        throw new Error(result?.message || "Failed to start room");
+      }
     } catch (error) {
       setLobbyError((error as Error).message);
     } finally {
