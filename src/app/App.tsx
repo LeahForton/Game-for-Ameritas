@@ -67,17 +67,27 @@ const jsonFetch = async (url: string, opts: RequestInit = {}) => {
   }
 };
 
-const createRoomInKV = async (code: string, hostName: string) =>
-  jsonFetch("/api/kv/room", {
-    method: "POST",
-    body: JSON.stringify({ code, hostName }),
-  });
+const normalizeRoomCode = (code: string) =>
+  code.trim().toUpperCase().replace(/[^A-Z]/g, "").slice(0, 4);
 
-const joinRoomInKV = async (code: string, playerName: string) =>
-  jsonFetch("/api/kv/join", {
+const createRoomInKV = async (code: string, hostName: string) => {
+  const normalizedCode = normalizeRoomCode(code);
+  console.log("createRoomInKV request", { code: normalizedCode, hostName });
+  return jsonFetch("/api/kv/room", {
     method: "POST",
-    body: JSON.stringify({ code, playerName }),
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ code: normalizedCode, hostName }),
   });
+};
+
+const joinRoomInKV = async (code: string, playerName: string) => {
+  const normalizedCode = normalizeRoomCode(code);
+  return jsonFetch("/api/kv/join", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ code: normalizedCode, playerName }),
+  });
+};
 
 const fetchPlayersFromKV = async (code: string): Promise<LobbyPlayer[]> =>
   jsonFetch(`/api/kv/players?code=${encodeURIComponent(code)}`);
@@ -85,6 +95,7 @@ const fetchPlayersFromKV = async (code: string): Promise<LobbyPlayer[]> =>
 const startRoomInKV = async (code: string) =>
   jsonFetch("/api/kv/start", {
     method: "POST",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ code }),
   });
 
@@ -1337,9 +1348,11 @@ export default function App() {
     if (isBusy) return;
     setLobbyError(null);
     setIsBusy(true);
-    const code = generateRoomCode(4);
+    const code = normalizeRoomCode(generateRoomCode(4));
+    console.log("handleHost start", { name, code });
     try {
-      await createRoomInKV(code, name);
+      const result = await createRoomInKV(code, name);
+      console.log("handleHost success", { result });
       setCompanyName(name);
       setRoomCode(code);
       setViewMode("host");
@@ -1349,6 +1362,7 @@ export default function App() {
       setPlayers([{ id: "host", name }]);
       setStepIdx(STEPS.findIndex(item => item.id === "host-lobby"));
     } catch (error) {
+      console.log("handleHost error", error);
       setLobbyError((error as Error).message);
     } finally {
       setIsBusy(false);

@@ -8,8 +8,10 @@ export default async function handler(req: Request) {
   }
 
   const body = await req.json().catch(() => null);
-  const code = String(body?.code ?? "").trim().toUpperCase().slice(0, 4);
+  const code = String(body?.code ?? "").trim().toUpperCase().replace(/[^A-Z]/g, "").slice(0, 4);
   const hostName = String(body?.hostName ?? "").trim();
+
+  console.log("room.ts received", { method: req.method, code, hostName });
 
   if (!code || !hostName) {
     return errorResponse("Missing room code or hostName", 400);
@@ -22,7 +24,7 @@ export default async function handler(req: Request) {
   }
 
   const playerId = crypto.randomUUID?.() ?? `host-${Date.now()}`;
-  await Promise.all([
+  const results = await Promise.all([
     redis.set(key, {
       code,
       hostName,
@@ -32,5 +34,7 @@ export default async function handler(req: Request) {
     redis.set(playersKey(code), [{ id: playerId, name: hostName }]),
   ]);
 
-  return jsonResponse({ code, hostName });
+  console.log("room.ts redis write results", results);
+
+  return jsonResponse({ success: true, code, hostName });
 }
