@@ -40,15 +40,31 @@ const generateRoomCode = (length = 4) =>
   ).join("");
 
 const jsonFetch = async (url: string, opts: RequestInit = {}) => {
-  const response = await fetch(url, {
-    headers: { "Content-Type": "application/json" },
-    ...opts,
-  });
-  const body = await response.json().catch(() => null);
-  if (!response.ok) {
-    throw new Error(body?.message || response.statusText || "Request failed");
+  try {
+    const response = await fetch(url, {
+      headers: { "Content-Type": "application/json" },
+      ...opts,
+    });
+
+    const text = await response.text();
+    let body: any = null;
+    try {
+      body = text ? JSON.parse(text) : null;
+    } catch {
+      body = null;
+    }
+
+    if (!response.ok) {
+      throw new Error(body?.message || response.statusText || "Request failed");
+    }
+
+    return body;
+  } catch (error) {
+    if (error instanceof Error) {
+      throw error;
+    }
+    throw new Error("Network request failed");
   }
-  return body;
 };
 
 const createRoomInKV = async (code: string, hostName: string) =>
@@ -386,7 +402,19 @@ const PlayerDashboard = ({ step, companyName }: { step:DemoStep; companyName:str
 };
 
 // ─── Screen: Home ─────────────────────────────────────────────────────────────
-const HomeScreen = ({onHost,onJoin}:{onHost:(name:string)=>void;onJoin:(code:string,name:string)=>void}) => {
+const ErrorOverlay = ({message,onClose}:{message:string;onClose:()=>void}) => (
+  <div style={{position:"fixed",inset:0,zIndex:9999,background:"rgba(0,0,0,.72)",display:"flex",alignItems:"center",justifyContent:"center",padding:"24px"}}>
+    <div style={{maxWidth:"520px",width:"100%",background:"#0f172a",borderRadius:"24px",padding:"28px",boxShadow:"0 24px 70px rgba(0,0,0,.45)",color:"#f8fafc"}}>
+      <h2 style={{margin:"0 0 14px",fontSize:"22px",fontWeight:900}}>Oops — something went wrong</h2>
+      <p style={{margin:"0 0 22px",lineHeight:1.6,color:"#cbd5e1"}}>{message}</p>
+      <button onClick={onClose} style={{fontFamily:F,fontWeight:800,fontSize:"14px",padding:"12px 18px",borderRadius:"999px",border:"none",background:"#4f46e5",color:"#fff",cursor:"pointer"}}>
+        Dismiss
+      </button>
+    </div>
+  </div>
+);
+
+const HomeScreen = ({onHost,onJoin,isBusy,roleLocked}:{onHost:(name:string)=>void;onJoin:(code:string,name:string)=>void;isBusy:boolean;roleLocked:boolean}) => {
   const [code,setCode]=useState("");
   const [name,setName]=useState("Apex Shield");
   return (
@@ -402,13 +430,13 @@ const HomeScreen = ({onHost,onJoin}:{onHost:(name:string)=>void;onJoin:(code:str
           Insurance ALM Simulation
         </p>
 
-        <button onClick={()=>onHost(name.trim()||"Apex Shield")} style={{
-          fontFamily:F,fontWeight:800,fontSize:"20px",padding:"20px 0",borderRadius:"18px",
-          border:"none",cursor:"pointer",width:"100%",
-          background:"linear-gradient(135deg,#4f46e5,#7c3aed)",color:"#fff",
-          boxShadow:"0 8px 32px rgba(79,70,229,.35)",marginBottom:"24px",
-          transition:"transform .15s"}}
-          onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.transform="translateY(-2px)"}}
+<button onClick={()=>!isBusy&&!roleLocked&&onHost(name.trim()||"Apex Shield")} disabled={isBusy || roleLocked} style={{
+            fontFamily:F,fontWeight:800,fontSize:"20px",padding:"20px 0",borderRadius:"18px",
+            border:"none",cursor:isBusy || roleLocked?"not-allowed":"pointer",width:"100%",
+            background:isBusy || roleLocked?"#6d7cff":"linear-gradient(135deg,#4f46e5,#7c3aed)",color:"#fff",
+            boxShadow:isBusy || roleLocked?"none":"0 8px 32px rgba(79,70,229,.35)",marginBottom:"24px",
+            transition:"transform .15s"}}
+            onMouseEnter={e=>{if(!isBusy && !roleLocked)(e.currentTarget as HTMLElement).style.transform="translateY(-2px)"}}
           onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.transform=""}}>
           Host a Game
         </button>
@@ -430,12 +458,12 @@ const HomeScreen = ({onHost,onJoin}:{onHost:(name:string)=>void;onJoin:(code:str
               fontFamily:F,fontSize:"16px",fontWeight:700,
               padding:"13px",borderRadius:"12px",border:"2px solid #c7d2fe",
               background:"#fff",color:"#1e1b4b",outline:"none",boxSizing:"border-box",width:"100%"}}/>
-          <button onClick={()=>onJoin(code.trim().toUpperCase(), name.trim()||"Apex Shield")} style={{
+          <button onClick={()=>!isBusy&&!roleLocked&&onJoin(code.trim().toUpperCase(), name.trim()||"Apex Shield")} disabled={isBusy || roleLocked} style={{
             fontFamily:F,fontWeight:800,fontSize:"17px",padding:"15px",borderRadius:"13px",
-            cursor:"pointer",
-            background:"#fff",color:"#4f46e5",border:"2px solid #c7d2fe",
-            boxShadow:"0 4px 16px rgba(79,70,229,.1)",transition:"transform .15s"}}
-            onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.transform="translateY(-2px)"}}
+            cursor:isBusy || roleLocked?"not-allowed":"pointer",
+            background:isBusy || roleLocked?"#f8fbff":"#fff",color:"#4f46e5",border:"2px solid #c7d2fe",
+            boxShadow:isBusy || roleLocked?"none":"0 4px 16px rgba(79,70,229,.1)",transition:"transform .15s"}}
+            onMouseEnter={e=>{if(!isBusy && !roleLocked)(e.currentTarget as HTMLElement).style.transform="translateY(-2px)"}}
             onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.transform=""}}>
             Join Game →
           </button>
@@ -1261,7 +1289,8 @@ const FinalScreen = ({viewMode,choices}:{viewMode:ViewMode;choices:(string|null)
 // ─── Main App ─────────────────────────────────────────────────────────────────
 export default function App() {
   const [stepIdx,     setStepIdx]     = useState(0);
-  const [viewMode,    setViewMode]    = useState<ViewMode>("host");
+  const [viewMode,    setViewMode]    = useState<ViewMode | null>(null);
+  const [roleLocked,  setRoleLocked]  = useState(false);
   const [choices,     setChoices]     = useState<(string|null)[]>(Array(5).fill(null));
   const [orsa,        setOrsa]        = useState<(string|null)[]>(Array(5).fill(null));
   const [companyName, setCompanyName] = useState("Apex Shield");
@@ -1284,6 +1313,7 @@ export default function App() {
       setRoomStatus(status ?? "waiting");
     } catch (error) {
       console.error(error);
+      setLobbyError((error as Error).message);
     }
   };
 
@@ -1304,6 +1334,7 @@ export default function App() {
   }, [roomStatus, step.id]);
 
   const handleHost = async (name: string) => {
+    if (isBusy) return;
     setLobbyError(null);
     setIsBusy(true);
     const code = generateRoomCode(4);
@@ -1311,7 +1342,9 @@ export default function App() {
       await createRoomInKV(code, name);
       setCompanyName(name);
       setRoomCode(code);
+      setViewMode("host");
       setIsHost(true);
+      setRoleLocked(true);
       setRoomStatus("waiting");
       setPlayers([{ id: "host", name }]);
       setStepIdx(STEPS.findIndex(item => item.id === "host-lobby"));
@@ -1323,13 +1356,21 @@ export default function App() {
   };
 
   const handleJoin = async (code: string, name: string) => {
+    if (isBusy) return;
+    if (!code || code.length !== 4) {
+      setLobbyError("Please enter a valid 4-letter room code to join.");
+      return;
+    }
+
     setLobbyError(null);
     setIsBusy(true);
     try {
       await joinRoomInKV(code, name);
       setCompanyName(name);
       setRoomCode(code);
+      setViewMode("player");
       setIsHost(false);
+      setRoleLocked(true);
       setRoomStatus("waiting");
       setStepIdx(STEPS.findIndex(item => item.id === "player-lobby"));
     } catch (error) {
@@ -1364,9 +1405,10 @@ export default function App() {
     setTimeout(advance,1300);
   };
 
+  const selectedViewMode: ViewMode = viewMode ?? "host";
   const isLobby    = ["home","host-lobby","player-lobby","tutorial"].includes(step.id);
   const isGamePhase= !isLobby;
-  const showDash   = viewMode==="player" && step.round!==undefined;
+  const showDash   = selectedViewMode==="player" && step.round!==undefined;
   const navHandled = ["decision","orsa","round-intro","event"].includes(step.id);
   const r          = step.round??1;
   const ri         = r-1;
@@ -1374,23 +1416,28 @@ export default function App() {
 
   const renderScreen = () => {
     switch(step.id){
-      case "home":         return <HomeScreen onHost={handleHost} onJoin={handleJoin}/>;
+      case "home":
+        return roleLocked
+          ? isHost
+            ? <HostLobbyScreen roomCode={roomCode} players={players} onStart={handleStart} error={lobbyError}/>
+            : <PlayerLobbyScreen roomCode={roomCode} companyName={companyName} players={players} started={roomStatus === "started"}/>
+          : <HomeScreen onHost={handleHost} onJoin={handleJoin} isBusy={isBusy} roleLocked={roleLocked}/>;
       case "host-lobby":   return <HostLobbyScreen roomCode={roomCode} players={players} onStart={handleStart} error={lobbyError}/>;
       case "player-lobby": return <PlayerLobbyScreen roomCode={roomCode} companyName={companyName} players={players} started={roomStatus === "started"}/>;
       case "tutorial":     return <TutorialScreen onStart={advance}/>;
-      case "round-intro":  return <RoundIntroScreen round={r} viewMode={viewMode} onNext={advance}/>;
+      case "round-intro":  return <RoundIntroScreen round={r} viewMode={selectedViewMode} onNext={advance}/>;
       case "decision":
-        return viewMode==="host"
+        return selectedViewMode==="host"
           ? <DecisionHostScreen round={r}/>
           : <DecisionPlayerScreen round={r} chosen={choices[ri]} onChoose={handleStrategy}/>;
       case "event":        return <EventScreen eventIdx={ev} onNext={advance}/>;
       case "rbc":
-        return viewMode==="host"
+        return selectedViewMode==="host"
           ? <RBCHostScreen round={r}/>
           : <RBCPlayerScreen round={r}/>;
-      case "orsa":         return <ORSAScreen round={r} viewMode={viewMode} chosen={orsa[ri]} onChoose={handleOrsa}/>;
-      case "leaderboard":  return <LeaderboardScreen round={r} viewMode={viewMode} companyName={companyName}/>;
-      case "final":        return <FinalScreen viewMode={viewMode} choices={choices}/>;
+      case "orsa":         return <ORSAScreen round={r} viewMode={selectedViewMode} chosen={orsa[ri]} onChoose={handleOrsa}/>;
+      case "leaderboard":  return <LeaderboardScreen round={r} viewMode={selectedViewMode} companyName={companyName}/>;
+      case "final":        return <FinalScreen viewMode={selectedViewMode} choices={choices}/>;
       default:             return null;
     }
   };
@@ -1403,7 +1450,7 @@ export default function App() {
       {showDash && <PlayerDashboard step={step} companyName={companyName}/>}
 
       {/* Host/Player toggle (game phases) */}
-      {isGamePhase&&(
+      {isGamePhase && !roleLocked && (
         <div style={{position:"fixed",top:"10px",right:"14px",zIndex:50,
           display:"flex",background:"rgba(13,17,23,.88)",borderRadius:"999px",
           padding:"3px",border:"1px solid #30363d",backdropFilter:"blur(8px)"}}>
@@ -1424,6 +1471,7 @@ export default function App() {
       <div style={{paddingTop:showDash?"54px":"0",paddingBottom:"60px"}}>
         {renderScreen()}
       </div>
+      {lobbyError && <ErrorOverlay message={lobbyError} onClose={()=>setLobbyError(null)} />}
 
       {/* Demo navigation bar */}
       <div style={{position:"fixed",bottom:0,left:0,right:0,zIndex:40,
@@ -1445,10 +1493,10 @@ export default function App() {
         </div>
 
         {!navHandled?(
-          <button onClick={advance} disabled={stepIdx===STEPS.length-1} style={{
+          <button onClick={advance} disabled={stepIdx===STEPS.length-1 || (step.id === "home" && !roleLocked)} style={{
             fontFamily:F,fontWeight:800,fontSize:"13px",padding:"6px 14px",
-            borderRadius:"10px",border:"1px solid #4f46e5",cursor:"pointer",
-            background:"#4f46e5",color:"#fff",transition:"all .15s",
+            borderRadius:"10px",border:"1px solid #4f46e5",cursor:stepIdx===STEPS.length-1 || (step.id === "home" && !roleLocked)?"not-allowed":"pointer",
+            background:stepIdx===STEPS.length-1 || (step.id === "home" && !roleLocked)?"#334155":"#4f46e5",color:"#fff",transition:"all .15s",
           }}>Next →</button>
         ):(
           <button onClick={advance} style={{
