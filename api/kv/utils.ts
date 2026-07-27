@@ -6,8 +6,8 @@ export const roomKey = (code: string) => `room:${code}`;
 export const playersKey = (code: string) => `room:${code}:players`;
 
 const redis = new Redis({
-  url: process.env.UPSTASH_REDIS_REST_URL ?? "",
-  token: process.env.UPSTASH_REDIS_REST_TOKEN ?? "",
+  url: process.env.KV_REST_API_URL ?? "",
+  token: process.env.KV_REST_API_TOKEN ?? "",
 });
 
 export const jsonResponse = (body: unknown, status = 200) =>
