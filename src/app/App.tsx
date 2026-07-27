@@ -28,6 +28,54 @@ interface DemoStep {
 interface PlayerRow {
   name: string; emoji: string; value: number; capital: number; rbc: number; status: RBCStatus;
 }
+interface LobbyPlayer {
+  id: string;
+  name: string;
+}
+type KVRoomStatus = "waiting" | "started";
+
+const generateRoomCode = (length = 4) =>
+  Array.from({ length }, () =>
+    String.fromCharCode(65 + Math.floor(Math.random() * 26))
+  ).join("");
+
+const jsonFetch = async (url: string, opts: RequestInit = {}) => {
+  const response = await fetch(url, {
+    headers: { "Content-Type": "application/json" },
+    ...opts,
+  });
+  const body = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new Error(body?.message || response.statusText || "Request failed");
+  }
+  return body;
+};
+
+const createRoomInKV = async (code: string, hostName: string) =>
+  jsonFetch("/api/kv/room", {
+    method: "POST",
+    body: JSON.stringify({ code, hostName }),
+  });
+
+const joinRoomInKV = async (code: string, playerName: string) =>
+  jsonFetch("/api/kv/join", {
+    method: "POST",
+    body: JSON.stringify({ code, playerName }),
+  });
+
+const fetchPlayersFromKV = async (code: string): Promise<LobbyPlayer[]> =>
+  jsonFetch(`/api/kv/players?code=${encodeURIComponent(code)}`);
+
+const startRoomInKV = async (code: string) =>
+  jsonFetch("/api/kv/start", {
+    method: "POST",
+    body: JSON.stringify({ code }),
+  });
+
+const fetchRoomStatusFromKV = async (code: string): Promise<KVRoomStatus> => {
+  const result = await jsonFetch(`/api/kv/status?code=${encodeURIComponent(code)}`);
+  return (result?.status ?? "waiting") as KVRoomStatus;
+};
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const hi = (s: RBCStatus) =>
@@ -338,7 +386,7 @@ const PlayerDashboard = ({ step, companyName }: { step:DemoStep; companyName:str
 };
 
 // ─── Screen: Home ─────────────────────────────────────────────────────────────
-const HomeScreen = ({onHost,onJoin}:{onHost:()=>void;onJoin:(name:string)=>void}) => {
+const HomeScreen = ({onHost,onJoin}:{onHost:(name:string)=>void;onJoin:(code:string,name:string)=>void}) => {
   const [code,setCode]=useState("");
   const [name,setName]=useState("Apex Shield");
   return (
@@ -354,7 +402,7 @@ const HomeScreen = ({onHost,onJoin}:{onHost:()=>void;onJoin:(name:string)=>void}
           Insurance ALM Simulation
         </p>
 
-        <button onClick={onHost} style={{
+        <button onClick={()=>onHost(name.trim()||"Apex Shield")} style={{
           fontFamily:F,fontWeight:800,fontSize:"20px",padding:"20px 0",borderRadius:"18px",
           border:"none",cursor:"pointer",width:"100%",
           background:"linear-gradient(135deg,#4f46e5,#7c3aed)",color:"#fff",
@@ -372,17 +420,17 @@ const HomeScreen = ({onHost,onJoin}:{onHost:()=>void;onJoin:(name:string)=>void}
         </div>
 
         <div style={{display:"flex",flexDirection:"column",gap:"10px"}}>
-          <input value={code} onChange={e=>setCode(e.target.value.toUpperCase().slice(0,6))}
+          <input value={code} onChange={e=>setCode(e.target.value.toUpperCase().slice(0,4))}
             placeholder="Room code" style={{
               fontFamily:M,fontSize:"22px",fontWeight:500,textAlign:"center",letterSpacing:"0.2em",
               padding:"14px",borderRadius:"12px",border:"2px solid #c7d2fe",
               background:"#fff",color:"#1e1b4b",outline:"none",boxSizing:"border-box",width:"100%"}}/>
           <input value={name} onChange={e=>setName(e.target.value)}
-            placeholder="Company name" style={{
+            placeholder="Your nickname" style={{
               fontFamily:F,fontSize:"16px",fontWeight:700,
               padding:"13px",borderRadius:"12px",border:"2px solid #c7d2fe",
               background:"#fff",color:"#1e1b4b",outline:"none",boxSizing:"border-box",width:"100%"}}/>
-          <button onClick={()=>onJoin(name.trim()||"Apex Shield")} style={{
+          <button onClick={()=>onJoin(code.trim().toUpperCase(), name.trim()||"Apex Shield")} style={{
             fontFamily:F,fontWeight:800,fontSize:"17px",padding:"15px",borderRadius:"13px",
             cursor:"pointer",
             background:"#fff",color:"#4f46e5",border:"2px solid #c7d2fe",
@@ -398,10 +446,17 @@ const HomeScreen = ({onHost,onJoin}:{onHost:()=>void;onJoin:(name:string)=>void}
 };
 
 // ─── Screen: Host Lobby ───────────────────────────────────────────────────────
-const HostLobbyScreen = ({onStart}:{onStart:()=>void}) => {
-  const [joinCount,setJoinCount] = useState(1);
-  useEffect(()=>{let i=1;const t=setInterval(()=>{if(i<6){i++;setJoinCount(i);}else clearInterval(t);},900);return()=>clearInterval(t);},[]);
-  const players=["🦅 Pinnacle Life","🐺 Guardian Re","🐉 Frontier Life","🐻 Summit Mutual","🌊 Coastal Assure","🦁 You (Apex Shield)"];
+const HostLobbyScreen = ({
+  roomCode,
+  players,
+  onStart,
+  error,
+}: {
+  roomCode: string;
+  players: LobbyPlayer[];
+  onStart: () => void;
+  error: string | null;
+}) => {
   return (
     <div style={{minHeight:"100vh",background:"#0d1117",display:"flex",flexDirection:"column",
       alignItems:"center",justifyContent:"center",padding:"40px 24px",fontFamily:F,color:"#f0f6fc"}}>
@@ -410,32 +465,33 @@ const HostLobbyScreen = ({onStart}:{onStart:()=>void}) => {
         <div style={{background:"#161b22",borderRadius:"24px",padding:"32px 40px",marginBottom:"28px",border:"1px solid #30363d"}}>
           <p style={{color:"#e2e8f0",fontWeight:700,fontSize:"12px",letterSpacing:"0.15em",marginBottom:"10px"}}>ROOM CODE — Share with players</p>
           <div style={{fontFamily:M,fontSize:"clamp(52px,12vw,84px)",fontWeight:500,letterSpacing:"0.2em",color:"#818cf8",lineHeight:1,marginBottom:"12px"}}>
-            BISC47
+            {roomCode}
           </div>
           <p style={{fontSize:"13px",color:"#e2e8f0"}}>lifeco.game → Enter this code to join</p>
         </div>
         <p style={{fontSize:"20px",fontWeight:800,marginBottom:"18px",color:"#c7d2fe"}}>
-          {joinCount} / 6 players connected
+          {players.length} players connected
         </p>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:"8px",marginBottom:"28px"}}>
-          {players.slice(0,joinCount).map((p,i)=>(
-            <div key={i} className="zi" style={{background:"#161b22",border:"1px solid #30363d",
-              borderRadius:"12px",padding:"10px",fontSize:"13px",fontWeight:700,textAlign:"center"}}>{p}</div>
-          ))}
-          {Array.from({length:6-joinCount}).map((_,i)=>(
-            <div key={i} style={{background:"#0d1117",border:"2px dashed #21262d",borderRadius:"12px",
-              padding:"10px",color:"#30363d",textAlign:"center",fontSize:"13px"}}>Waiting…</div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:"8px",marginBottom:"28px"}}>
+          {players.map((player) => (
+            <div key={player.id} className="zi" style={{background:"#161b22",border:"1px solid #30363d",
+              borderRadius:"12px",padding:"12px",fontSize:"13px",fontWeight:700,textAlign:"center"}}>
+              {player.name}
+            </div>
           ))}
         </div>
-        <button onClick={onStart} disabled={joinCount<2} style={{
+        {error && (
+          <div style={{color:"#f87171",fontWeight:700,marginBottom:"16px"}}>{error}</div>
+        )}
+        <button onClick={onStart} disabled={players.length < 2} style={{
           fontFamily:F,fontWeight:800,fontSize:"20px",padding:"18px 0",
-          borderRadius:"16px",border:"none",cursor:joinCount>=2?"pointer":"not-allowed",
-          background:joinCount>=2?"linear-gradient(135deg,#4f46e5,#7c3aed)":"#21262d",
-          color:joinCount>=2?"#fff":"#30363d",
-          boxShadow:joinCount>=2?"0 8px 32px rgba(79,70,229,.4)":"none",
+          borderRadius:"16px",border:"none",cursor:players.length>=2?"pointer":"not-allowed",
+          background:players.length>=2?"linear-gradient(135deg,#4f46e5,#7c3aed)":"#21262d",
+          color:players.length>=2?"#fff":"#30363d",
+          boxShadow:players.length>=2?"0 8px 32px rgba(79,70,229,.4)":"none",
           transition:"all .2s",width:"100%",
         }}>
-          {joinCount>=2?"▶ Start Game":"Waiting for more players…"}
+          {players.length >= 2 ? "▶ Start Game" : "Waiting for more players…"}
         </button>
       </div>
     </div>
@@ -443,10 +499,17 @@ const HostLobbyScreen = ({onStart}:{onStart:()=>void}) => {
 };
 
 // ─── Screen: Player Lobby ─────────────────────────────────────────────────────
-const PlayerLobbyScreen = ({companyName}:{companyName:string}) => {
-  const [count,setCount]=useState(2);
-  useEffect(()=>{let i=2;const t=setInterval(()=>{if(i<5){i++;setCount(i);}else clearInterval(t);},1100);return()=>clearInterval(t);},[]);
-  const joiners=["🦅 Pinnacle Life","🐺 Guardian Re","🐉 Frontier Life","🐻 Summit Mutual","🌊 Coastal Assure"];
+const PlayerLobbyScreen = ({
+  roomCode,
+  companyName,
+  players,
+  started,
+}: {
+  roomCode: string;
+  companyName: string;
+  players: LobbyPlayer[];
+  started: boolean;
+}) => {
   return (
     <div style={{minHeight:"100vh",background:"#f0f4ff",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:F,padding:"24px"}}>
       <div className="fu" style={{textAlign:"center",maxWidth:"420px",width:"100%"}}>
@@ -454,17 +517,21 @@ const PlayerLobbyScreen = ({companyName}:{companyName:string}) => {
           <p style={{color:"#6366f1",fontWeight:700,fontSize:"11px",letterSpacing:"0.15em",marginBottom:"6px"}}>YOUR COMPANY</p>
           <div style={{fontSize:"36px",marginBottom:"4px"}}>🦁</div>
           <h2 style={{fontSize:"26px",fontWeight:900,color:"#1e1b4b",marginBottom:"2px"}}>{companyName}</h2>
-          <p style={{color:"#94a3b8",fontSize:"12px"}}>Room: BISC47</p>
+          <p style={{color:"#94a3b8",fontSize:"12px"}}>Room: {roomCode}</p>
         </div>
         <div style={{background:"#fff",borderRadius:"20px",padding:"24px",border:"1px solid #e0e7ff",boxShadow:"0 4px 16px rgba(79,70,229,.08)",marginBottom:"16px"}}>
           <div className="po" style={{fontSize:"36px",marginBottom:"10px"}}>⏳</div>
-          <p style={{fontWeight:800,fontSize:"18px",color:"#1e1b4b",marginBottom:"4px"}}>Waiting for host…</p>
-          <p style={{color:"#6366f1",fontSize:"14px",fontWeight:700}}>{count} players connected</p>
+          <p style={{fontWeight:800,fontSize:"18px",color:"#1e1b4b",marginBottom:"4px"}}>
+            {started ? "Host started the game!" : "Waiting for host…"}
+          </p>
+          <p style={{color:"#6366f1",fontSize:"14px",fontWeight:700}}>{players.length} players connected</p>
         </div>
         <div style={{display:"flex",flexWrap:"wrap",gap:"8px",justifyContent:"center"}}>
-          {joiners.slice(0,count-1).map((p,i)=>(
-            <div key={i} className="zi" style={{background:"#fff",borderRadius:"10px",padding:"7px 12px",
-              fontSize:"13px",fontWeight:700,color:"#4338ca",border:"1px solid #e0e7ff"}}>{p}</div>
+          {players.map((player) => (
+            <div key={player.id} className="zi" style={{background:"#fff",borderRadius:"10px",padding:"7px 12px",
+              fontSize:"13px",fontWeight:700,color:"#4338ca",border:"1px solid #e0e7ff"}}>
+              {player.name}
+            </div>
           ))}
         </div>
       </div>
@@ -1198,10 +1265,93 @@ export default function App() {
   const [choices,     setChoices]     = useState<(string|null)[]>(Array(5).fill(null));
   const [orsa,        setOrsa]        = useState<(string|null)[]>(Array(5).fill(null));
   const [companyName, setCompanyName] = useState("Apex Shield");
+  const [roomCode,    setRoomCode]    = useState("");
+  const [players,     setPlayers]     = useState<LobbyPlayer[]>([]);
+  const [roomStatus,  setRoomStatus]  = useState<KVRoomStatus>("waiting");
+  const [isHost,      setIsHost]      = useState(false);
+  const [lobbyError,  setLobbyError]  = useState<string | null>(null);
+  const [isBusy,      setIsBusy]      = useState(false);
 
   const step    = STEPS[stepIdx];
   const advance = () => setStepIdx(i=>Math.min(i+1,STEPS.length-1));
   const back    = () => setStepIdx(i=>Math.max(i-1,0));
+
+  const loadLobby = async (code: string) => {
+    try {
+      const nextPlayers = await fetchPlayersFromKV(code);
+      const status = await fetchRoomStatusFromKV(code);
+      setPlayers(nextPlayers ?? []);
+      setRoomStatus(status ?? "waiting");
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  useEffect(() => {
+    if (!roomCode) return;
+    loadLobby(roomCode);
+    const interval = window.setInterval(() => {
+      loadLobby(roomCode);
+    }, 2000);
+    return () => window.clearInterval(interval);
+  }, [roomCode]);
+
+  useEffect(() => {
+    if (roomStatus !== "started") return;
+    if (step.id === "host-lobby" || step.id === "player-lobby") {
+      setTimeout(() => setStepIdx(i=>Math.min(i+1,STEPS.length-1)), 300);
+    }
+  }, [roomStatus, step.id]);
+
+  const handleHost = async (name: string) => {
+    setLobbyError(null);
+    setIsBusy(true);
+    const code = generateRoomCode(4);
+    try {
+      await createRoomInKV(code, name);
+      setCompanyName(name);
+      setRoomCode(code);
+      setIsHost(true);
+      setRoomStatus("waiting");
+      setPlayers([{ id: "host", name }]);
+      setStepIdx(STEPS.findIndex(item => item.id === "host-lobby"));
+    } catch (error) {
+      setLobbyError((error as Error).message);
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
+  const handleJoin = async (code: string, name: string) => {
+    setLobbyError(null);
+    setIsBusy(true);
+    try {
+      await joinRoomInKV(code, name);
+      setCompanyName(name);
+      setRoomCode(code);
+      setIsHost(false);
+      setRoomStatus("waiting");
+      setStepIdx(STEPS.findIndex(item => item.id === "player-lobby"));
+    } catch (error) {
+      setLobbyError((error as Error).message);
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
+  const handleStart = async () => {
+    if (!roomCode) return;
+    setLobbyError(null);
+    setIsBusy(true);
+    try {
+      await startRoomInKV(roomCode);
+      setRoomStatus("started");
+    } catch (error) {
+      setLobbyError((error as Error).message);
+    } finally {
+      setIsBusy(false);
+    }
+  };
 
   const handleStrategy = (id:string) => {
     const ri=(step.round??1)-1;
@@ -1224,9 +1374,9 @@ export default function App() {
 
   const renderScreen = () => {
     switch(step.id){
-      case "home":         return <HomeScreen onHost={()=>{setViewMode("host");advance();}} onJoin={(n)=>{setCompanyName(n);setViewMode("player");advance();}}/>;
-      case "host-lobby":   return <HostLobbyScreen onStart={advance}/>;
-      case "player-lobby": return <PlayerLobbyScreen companyName={companyName}/>;
+      case "home":         return <HomeScreen onHost={handleHost} onJoin={handleJoin}/>;
+      case "host-lobby":   return <HostLobbyScreen roomCode={roomCode} players={players} onStart={handleStart} error={lobbyError}/>;
+      case "player-lobby": return <PlayerLobbyScreen roomCode={roomCode} companyName={companyName} players={players} started={roomStatus === "started"}/>;
       case "tutorial":     return <TutorialScreen onStart={advance}/>;
       case "round-intro":  return <RoundIntroScreen round={r} viewMode={viewMode} onNext={advance}/>;
       case "decision":
