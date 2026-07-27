@@ -33,6 +33,10 @@ interface LobbyPlayer {
   name: string;
 }
 type KVRoomStatus = "waiting" | "started";
+interface KVRoomState {
+  status: KVRoomStatus;
+  current_round: number;
+}
 
 const generateRoomCode = (length = 4) =>
   Array.from({ length }, () =>
@@ -99,10 +103,20 @@ const startRoomInKV = async (code: string) =>
     body: JSON.stringify({ code }),
   });
 
-const fetchRoomStatusFromKV = async (code: string): Promise<KVRoomStatus> => {
+const fetchRoomStatusFromKV = async (code: string): Promise<KVRoomState> => {
   const result = await jsonFetch(`/api/kv/status?code=${encodeURIComponent(code)}`);
-  return (result?.status ?? "waiting") as KVRoomStatus;
+  return {
+    status: (result?.status ?? "waiting") as KVRoomStatus,
+    current_round: Number(result?.current_round ?? 1),
+  };
 };
+
+const nextRoundInKV = async (code: string) =>
+  jsonFetch("/api/kv/next-round", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ code }),
+  });
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const hi = (s: RBCStatus) =>
@@ -1306,6 +1320,8 @@ export default function App() {
   const [roomCode,    setRoomCode]    = useState("");
   const [players,     setPlayers]     = useState<LobbyPlayer[]>([]);
   const [roomStatus,  setRoomStatus]  = useState<KVRoomStatus>("waiting");
+  const [currentRound, setCurrentRound] = useState(1);
+  const [syncedRound, setSyncedRound] = useState(1);
   const [isHost,      setIsHost]      = useState(false);
   const [lobbyError,  setLobbyError]  = useState<string | null>(null);
   const [isBusy,      setIsBusy]      = useState(false);
@@ -1317,9 +1333,10 @@ export default function App() {
   const loadLobby = async (code: string) => {
     try {
       const nextPlayers = await fetchPlayersFromKV(code);
-      const status = await fetchRoomStatusFromKV(code);
+      const roomState = await fetchRoomStatusFromKV(code);
       setPlayers(nextPlayers ?? []);
-      setRoomStatus(status ?? "waiting");
+      setRoomStatus(roomState.status);
+      setCurrentRound(roomState.current_round);
     } catch (error) {
       console.error(error);
       setLobbyError((error as Error).message);
@@ -1341,6 +1358,27 @@ export default function App() {
       setTimeout(() => setStepIdx(i=>Math.min(i+1,STEPS.length-1)), 300);
     }
   }, [roomStatus, step.id]);
+
+  useEffect(() => {
+    if (currentRound <= syncedRound) return;
+    setSyncedRound(currentRound);
+
+    setChoices(prev => {
+      const next = [...prev];
+      if (currentRound - 1 < next.length) next[currentRound - 1] = null;
+      return next;
+    });
+    setOrsa(prev => {
+      const next = [...prev];
+      if (currentRound - 1 < next.length) next[currentRound - 1] = null;
+      return next;
+    });
+
+    const nextStep = STEPS.findIndex(item => item.id === "round-intro" && item.round === currentRound);
+    if (nextStep >= 0) {
+      setStepIdx(nextStep);
+    }
+  }, [currentRound, syncedRound]);
 
   const handleHost = async (name: string) => {
     if (isBusy) return;
@@ -1416,6 +1454,25 @@ export default function App() {
     }
   };
 
+  const handleNextRound = async () => {
+    if (!roomCode) return;
+    setLobbyError(null);
+    setIsBusy(true);
+    try {
+      const result = await nextRoundInKV(roomCode);
+      console.log("handleNextRound result", result);
+      if (result?.success) {
+        setCurrentRound(result.current_round);
+      } else {
+        throw new Error(result?.message || "Failed to advance round");
+      }
+    } catch (error) {
+      setLobbyError((error as Error).message);
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
   const handleStrategy = (id:string) => {
     const ri=(step.round??1)-1;
     setChoices(prev=>{const n=[...prev];n[ri]=id;return n;});
@@ -1470,6 +1527,25 @@ export default function App() {
 
       {/* Player persistent dashboard */}
       {showDash && <PlayerDashboard step={step} companyName={companyName}/>}
+
+      {/* Host round control */}
+      {isHost && selectedViewMode === "host" && roomStatus === "started" && (
+        <div style={{position:"fixed",top:0,left:0,right:0,zIndex:40,
+          display:"flex",alignItems:"center",justifyContent:"space-between",
+          padding:"10px 16px",background:"rgba(13,17,23,.95)",backdropFilter:"blur(12px)",borderBottom:"1px solid #21262d"}}>
+          <div style={{color:"#c7d2fe",fontWeight:700,fontSize:"14px"}}>
+            Host Control — Current Round {currentRound}
+          </div>
+          <button onClick={handleNextRound} disabled={isBusy} style={{
+            fontFamily:F,fontWeight:800,fontSize:"13px",padding:"10px 14px",
+            borderRadius:"999px",border:"none",cursor:isBusy?"not-allowed":"pointer",
+            background:isBusy?"#30363d":"linear-gradient(135deg,#4f46e5,#7c3aed)",
+            color:"#fff",boxShadow:isBusy?"none":"0 8px 24px rgba(79,70,229,.24)",transition:"transform .2s"
+          }}>
+            {isBusy ? "Advancing…" : "Advance Round"}
+          </button>
+        </div>
+      )}
 
       {/* Host/Player toggle (game phases) */}
       {isGamePhase && !roleLocked && (

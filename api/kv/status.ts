@@ -18,5 +18,8 @@ export default async function handler(req: Request) {
     return errorResponse("Room not found", 404);
   }
 
-  return jsonResponse({ status: (room as any).status ?? "waiting" });
+  return jsonResponse({
+    status: (room as any).status ?? "waiting",
+    current_round: Number((room as any).current_round ?? 1),
+  });
 }

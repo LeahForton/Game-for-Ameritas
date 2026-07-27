@@ -29,6 +29,7 @@ export default async function handler(req: Request) {
       code,
       hostName,
       status: "waiting",
+      current_round: 1,
       createdAt: new Date().toISOString(),
     }),
     redis.set(playersKey(code), [{ id: playerId, name: hostName }]),
