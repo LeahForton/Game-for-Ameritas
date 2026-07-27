@@ -18,6 +18,6 @@ export default async function handler(req: Request) {
     return errorResponse("Room not found", 404);
   }
 
-  const players = (await redis.get(playersKey(code))) as Array<{ id: string; name: string }> | null;
+  const players = (await redis.get(playersKey(code))) as Array<{ id: string; name: string; capital?: number }> | null;
   return jsonResponse(players ?? []);
 }

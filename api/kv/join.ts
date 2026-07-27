@@ -27,8 +27,8 @@ export default async function handler(req: Request) {
   const currentPlayers = (await redis.get(playersKey(code))) as Array<{ id: string; name: string }> | null;
   const players = currentPlayers ?? [];
   const id = crypto.randomUUID?.() ?? `player-${Date.now()}`;
-  players.push({ id, name: playerName });
+  players.push({ id, name: playerName, capital: 100 });
 
   await redis.set(playersKey(code), players);
-  return jsonResponse({ players });
+  return jsonResponse({ success: true, players, playerId: id });
 }

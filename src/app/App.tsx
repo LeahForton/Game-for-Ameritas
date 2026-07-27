@@ -3,6 +3,40 @@ import { useState, useEffect } from "react";
 const F = "'Nunito', sans-serif";
 const M = "'DM Mono', monospace";
 
+const TrendIcon = ({ color = "#94a3b8" }: { color?: string }) => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="3 17 9 11 13 15 21 7" />
+    <polyline points="14 7 21 7 21 14" />
+  </svg>
+);
+const MoneyIcon = ({ color = "#60a5fa" }: { color?: string }) => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="3" y="6" width="18" height="12" rx="2" />
+    <path d="M12 9v6" />
+    <path d="M9 8h6" />
+    <path d="M9 16h6" />
+  </svg>
+);
+const GroupIcon = ({ color = "#c7d2fe" }: { color?: string }) => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+    <circle cx="9" cy="7" r="4" />
+    <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+    <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+  </svg>
+);
+const ChartIcon = ({ color = "#f8fafc" }: { color?: string }) => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M4 19h16" />
+    <path d="M4 15l4-4 4 4 8-8" />
+  </svg>
+);
+const ShieldIcon = ({ color = "#8b95e8" }: { color?: string }) => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+  </svg>
+);
+
 const CSS = `
 @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&family=DM+Mono:wght@400;500&display=swap');
 @keyframes fadeUp  { from{opacity:0;transform:translateY(22px)} to{opacity:1;transform:translateY(0)} }
@@ -31,6 +65,7 @@ interface PlayerRow {
 interface LobbyPlayer {
   id: string;
   name: string;
+  capital?: number;
 }
 type KVRoomStatus = "waiting" | "started" | "finished";
 interface KVRoomState {
@@ -92,6 +127,13 @@ const joinRoomInKV = async (code: string, playerName: string) => {
     body: JSON.stringify({ code: normalizedCode, playerName }),
   });
 };
+
+const updatePlayerCapitalInKV = async (code: string, playerId: string, capital: number) =>
+  jsonFetch("/api/kv/update-player", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ code, playerId, capital }),
+  });
 
 const fetchPlayersFromKV = async (code: string): Promise<LobbyPlayer[]> =>
   jsonFetch(`/api/kv/players?code=${encodeURIComponent(code)}`);
@@ -435,11 +477,13 @@ const PlayerDashboard = ({ step, companyName }: { step:DemoStep; companyName:str
       </div>
       {/* Stats strip */}
       <div style={{display:"flex",gap:"12px",alignItems:"center",flexWrap:"wrap",justifyContent:"flex-end"}}>
-        {[{ico:"📈",lbl:"Value",val:s.value},{ico:"💰",lbl:"Capital",val:s.capital}].map(it=>(
-          <div key={it.lbl} style={{display:"flex",alignItems:"center",gap:"4px"}}>
-            <span style={{fontSize:"13px"}}>{it.ico}</span>
-            <span style={{fontFamily:M,fontSize:"14px",color:"#f0f6fc",fontWeight:500}}>{it.val}</span>
-            <span style={{fontSize:"10px",color:"#e2e8f0",fontWeight:700}}>{it.lbl}</span>
+        {[{icon:<TrendIcon color="#c7d2fe" />,lbl:"Value",val:s.value},{icon:<MoneyIcon color="#60a5fa" />,lbl:"Capital",val:s.capital}].map(it=>(
+          <div key={it.lbl} style={{display:"flex",alignItems:"center",gap:"8px"}}>
+            {it.icon}
+            <div>
+              <div style={{fontFamily:M,fontSize:"14px",color:"#f0f6fc",fontWeight:700}}>{it.val}</div>
+              <div style={{fontSize:"10px",color:"#94a3b8",fontWeight:700,letterSpacing:"0.08em"}}>{it.lbl}</div>
+            </div>
           </div>
         ))}
         <span style={{fontSize:"12px",fontWeight:800,color:"#818cf8",whiteSpace:"nowrap"}}>{companyName}</span>
@@ -676,10 +720,12 @@ const RoundIntroScreen = ({round,viewMode,onNext,playerCapital,playerValue}:{rou
         {round===5?"FINAL":round}
       </div>
       {viewMode==="player"&&(
-        <div style={{marginTop:"36px",background:"#161b22",borderRadius:"16px",padding:"18px 24px",
-          border:"1px solid #30363d",display:"inline-block"}}>
-          <p style={{color:"#e2e8f0",fontSize:"11px",fontWeight:700,letterSpacing:"0.1em",marginBottom:"10px"}}>APEX SHIELD — GOING INTO ROUND {round}</p>
-          <div style={{display:"flex",gap:"20px",justifyContent:"center"}}>
+        <div style={{marginTop:"36px",background:"#161b22",borderRadius:"18px",padding:"24px",
+          border:"1px solid #30363d",display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:"16px"}}>
+          <div style={{gridColumn:"1/-1",color:"#c7d2fe",fontSize:"12px",fontWeight:700,letterSpacing:"0.12em",textTransform:"uppercase"}}>
+            Apex Shield — going into Round {round}
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:"16px"}}>
             {([["📈","Value",playerValue],["💰","Capital",playerCapital],
                ["🛡","Min. Req.",P_STATS[round-1].rbc],["⭐","Rep.",P_STATS[round-1].rep]] as [string,string,number][]).map(([ico,lbl,val])=>(
               <div key={lbl} style={{textAlign:"center"}}>
@@ -1363,7 +1409,8 @@ export default function App() {
   const [orsa,        setOrsa]        = useState<(string|null)[]>(Array(5).fill(null));
   const [companyName, setCompanyName] = useState("");
   const [roomCode,    setRoomCode]    = useState("");
-  const [players,     setPlayers]     = useState<LobbyPlayer[]>([]);
+    const [players,     setPlayers]     = useState<LobbyPlayer[]>([]);
+  const [playerId,    setPlayerId]    = useState<string | null>(null);
   const [roomStatus,  setRoomStatus]  = useState<KVRoomStatus>("waiting");
   const [currentRound, setCurrentRound] = useState(1);
   const [syncedRound, setSyncedRound] = useState(1);
@@ -1382,7 +1429,10 @@ export default function App() {
     try {
       const nextPlayers = await fetchPlayersFromKV(code);
       const roomState = await fetchRoomStatusFromKV(code);
-      setPlayers(nextPlayers ?? []);
+      setPlayers((nextPlayers ?? []).map((player) => ({
+        ...player,
+        capital: player.capital ?? 100,
+      })));
       setRoomStatus(roomState.status);
       setCurrentRound(roomState.current_round);
       setIsFinished(roomState.status === "finished");
@@ -1463,7 +1513,8 @@ export default function App() {
       setIsHost(true);
       setRoleLocked(true);
       setRoomStatus("waiting");
-      setPlayers([{ id: "host", name: name.trim() }]);
+      setPlayerId(result?.playerId ?? null);
+      setPlayers([{ id: result?.playerId ?? "host", name: name.trim(), capital: 100 }]);
       setPlayerCapital(100);
       setPlayerValue(0);
       setStepIdx(STEPS.findIndex(item => item.id === "host-lobby"));
@@ -1489,13 +1540,14 @@ export default function App() {
     setLobbyError(null);
     setIsBusy(true);
     try {
-      await joinRoomInKV(code, name);
+      const result = await joinRoomInKV(code, name);
       setCompanyName(name);
       setRoomCode(code);
       setViewMode("player");
       setIsHost(false);
       setRoleLocked(true);
       setRoomStatus("waiting");
+      setPlayerId(result?.playerId ?? null);
       setPlayerCapital(100);
       setPlayerValue(0);
       setStepIdx(STEPS.findIndex(item => item.id === "player-lobby"));
@@ -1549,6 +1601,15 @@ export default function App() {
     }
   };
 
+  const syncPlayerCapital = async (capital: number) => {
+    if (!roomCode || !playerId) return;
+    try {
+      await updatePlayerCapitalInKV(roomCode, playerId, capital);
+    } catch (error) {
+      console.warn("Failed to sync player capital", error);
+    }
+  };
+
   const handleStrategy = (id:string) => {
     const previousCapital = playerCapital;
     const valueDelta = getStrategyValueDelta(id);
@@ -1562,6 +1623,7 @@ export default function App() {
 
     setPlayerCapital(nextCapital);
     setPlayerValue((prev) => prev + valueDelta);
+    syncPlayerCapital(nextCapital);
 
     const ri=(step.round??1)-1;
     setChoices(prev=>{const n=[...prev];n[ri]=id;return n;});
@@ -1612,6 +1674,7 @@ export default function App() {
             console.log("Previous Capital:", prev);
             console.log("Choice Multiplier / Delta:", { eventIdx: ev, delta });
             console.log("New Capital Computed:", next);
+            syncPlayerCapital(next);
             return next;
           });
         }} onNext={advance}/>;
@@ -1664,7 +1727,7 @@ export default function App() {
               background:viewMode===v?"#4f46e5":"transparent",
               color:viewMode===v?"#fff":"#8b949e",transition:"all .2s",
             }}>
-              {v==="host"?"🖥 Host":"📱 Player"}
+              {v==="host"?"Host":"Player"}
             </button>
           ))}
         </div>
@@ -1672,7 +1735,37 @@ export default function App() {
 
       {/* Screen content */}
       <div style={{paddingTop:showDash?"54px":"0",paddingBottom:"60px"}}>
-        {renderScreen()}
+        {isHost && selectedViewMode === "host" && roomStatus === "started" ? (
+          <div style={{display:"grid",gridTemplateColumns:"1fr 320px",gap:"24px",padding:"24px 18px",maxWidth:"1280px",margin:"0 auto"}}>
+            <div>{renderScreen()}</div>
+            <div style={{background:"rgba(15,23,42,.95)",border:"1px solid #334155",borderRadius:"24px",padding:"22px 20px",minWidth:"280px",alignSelf:"start"}}>
+              <div style={{display:"flex",alignItems:"center",gap:"10px",marginBottom:"18px"}}>
+                <GroupIcon color="#c7d2fe" />
+                <div>
+                  <p style={{margin:0,fontSize:"12px",fontWeight:700,color:"#94a3b8",letterSpacing:"0.14em",textTransform:"uppercase"}}>Live Company Performance</p>
+                  <p style={{margin:0,fontSize:"16px",fontWeight:900,color:"#f8fafc"}}>Performance Ticker</p>
+                </div>
+              </div>
+              <div style={{display:"grid",gap:"12px"}}>
+                {players.map((player) => (
+                  <div key={player.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",
+                    padding:"14px 16px",borderRadius:"16px",background:"#111827",border:"1px solid #1f2937"}}>
+                    <div>
+                      <p style={{margin:0,fontSize:"14px",fontWeight:800,color:"#f8fafc"}}>{player.name}</p>
+                      <p style={{margin:0,fontSize:"11px",color:"#94a3b8",fontWeight:600}}>Capital</p>
+                    </div>
+                    <div style={{display:"flex",alignItems:"center",gap:"6px"}}>
+                      <MoneyIcon color="#60a5fa" />
+                      <span style={{fontSize:"15px",fontWeight:900,color:"#fff"}}>{(player.capital ?? 100).toLocaleString()}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        ) : (
+          renderScreen()
+        )}
       </div>
       {lobbyError && <ErrorOverlay message={lobbyError} onClose={()=>setLobbyError(null)} />}
 

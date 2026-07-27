@@ -32,10 +32,10 @@ export default async function handler(req: Request) {
       current_round: 1,
       createdAt: new Date().toISOString(),
     }),
-    redis.set(playersKey(code), [{ id: playerId, name: hostName }]),
+    redis.set(playersKey(code), [{ id: playerId, name: hostName, capital: 100 }]),
   ]);
 
   console.log("room.ts redis write results", results);
 
-  return jsonResponse({ success: true, code, hostName });
+  return jsonResponse({ success: true, code, hostName, playerId });
 }

@@ -1,6 +1,6 @@
 import { Redis } from "@upstash/redis";
 
-export type KVRoomStatus = "waiting" | "started";
+export type KVRoomStatus = "waiting" | "started" | "finished";
 
 export const roomKey = (code: string) => `room:${code}`;
 export const playersKey = (code: string) => `room:${code}:players`;
