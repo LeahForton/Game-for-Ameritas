@@ -20,6 +20,17 @@ export default async function handler(req: Request) {
   }
 
   const currentRound = Number((room as any).current_round ?? 1);
+  const MAX_ROUNDS = 5;
+
+  if (currentRound >= MAX_ROUNDS) {
+    await redis.set(key, {
+      ...(room as Record<string, unknown>),
+      status: "finished",
+    });
+
+    return jsonResponse({ success: true, code, status: "finished" });
+  }
+
   const nextRound = currentRound + 1;
 
   await redis.set(key, {

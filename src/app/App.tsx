@@ -32,7 +32,7 @@ interface LobbyPlayer {
   id: string;
   name: string;
 }
-type KVRoomStatus = "waiting" | "started";
+type KVRoomStatus = "waiting" | "started" | "finished";
 interface KVRoomState {
   status: KVRoomStatus;
   current_round: number;
@@ -1171,10 +1171,17 @@ const LeaderboardScreen = ({round,viewMode,companyName}:{round:number;viewMode:V
 };
 
 // ─── Screen: Final Results ────────────────────────────────────────────────────
-const FinalScreen = ({viewMode,choices}:{viewMode:ViewMode;choices:(string|null)[]}) => {
-  const sorted = [...LEADERBOARD[4]].sort((a,b)=>b.value-a.value);
+const FinalScreen = ({viewMode,choices,players,playerCapital,playerValue}:{viewMode:ViewMode;choices:(string|null)[];players:LobbyPlayer[];playerCapital:number;playerValue:number}) => {
+  const finalSnapshot = LEADERBOARD[4].map(row =>
+    row.name === "Apex Shield"
+      ? { ...row, capital: playerCapital, value: playerValue, status: statusOf(playerCapital, P_STATS[5].rbc) }
+      : row
+  );
+  const sorted = [...finalSnapshot].sort((a,b) =>
+    b.value !== a.value ? b.value - a.value : b.capital - a.capital
+  );
   const playerIdx = sorted.findIndex(r=>r.name==="Apex Shield");
-  const playerRow = sorted[playerIdx];
+  const playerRow = sorted[playerIdx] ?? finalSnapshot.find(r => r.name === "Apex Shield");
   const safeCount = choices.filter(c=>c==="conservative").length;
   const riskyCount= choices.filter(c=>c==="aggressive").length;
   const playerStatus = playerRow ? statusOf(playerRow.capital, playerRow.rbc) : "watch";
@@ -1360,6 +1367,7 @@ export default function App() {
   const [roomStatus,  setRoomStatus]  = useState<KVRoomStatus>("waiting");
   const [currentRound, setCurrentRound] = useState(1);
   const [syncedRound, setSyncedRound] = useState(1);
+  const [isFinished, setIsFinished] = useState(false);
   const [playerCapital, setPlayerCapital] = useState(100);
   const [playerValue, setPlayerValue] = useState(0);
   const [isHost,      setIsHost]      = useState(false);
@@ -1377,6 +1385,7 @@ export default function App() {
       setPlayers(nextPlayers ?? []);
       setRoomStatus(roomState.status);
       setCurrentRound(roomState.current_round);
+      setIsFinished(roomState.status === "finished");
     } catch (error) {
       console.error(error);
       setLobbyError((error as Error).message);
@@ -1398,6 +1407,24 @@ export default function App() {
       setTimeout(() => setStepIdx(i=>Math.min(i+1,STEPS.length-1)), 300);
     }
   }, [roomStatus, step.id]);
+
+  const endGameIfFinished = () => {
+    if (isFinished) {
+      setRoomStatus("finished");
+      setStepIdx(STEPS.findIndex(item => item.id === "final"));
+    }
+  };
+
+  useEffect(() => {
+    if (roomStatus === "finished") {
+      setIsFinished(true);
+    }
+  }, [roomStatus]);
+
+  useEffect(() => {
+    if (!isFinished) return;
+    setStepIdx(STEPS.findIndex(item => item.id === "final"));
+  }, [isFinished]);
 
   useEffect(() => {
     if (currentRound <= syncedRound) return;
@@ -1506,7 +1533,12 @@ export default function App() {
       const result = await nextRoundInKV(roomCode);
       console.log("handleNextRound result", result);
       if (result?.success) {
-        setCurrentRound(result.current_round);
+        if (result.status === "finished") {
+          setRoomStatus("finished");
+          setIsFinished(true);
+        } else {
+          setCurrentRound(result.current_round);
+        }
       } else {
         throw new Error(result?.message || "Failed to advance round");
       }
@@ -1589,7 +1621,7 @@ export default function App() {
           : <RBCPlayerScreen round={r} playerCapital={playerCapital} playerValue={playerValue}/>;
       case "orsa":         return <ORSAScreen round={r} viewMode={selectedViewMode} chosen={orsa[ri]} onChoose={handleOrsa}/>;
       case "leaderboard":  return <LeaderboardScreen round={r} viewMode={selectedViewMode} companyName={companyName}/>;
-      case "final":        return <FinalScreen viewMode={selectedViewMode} choices={choices}/>;
+      case "final":        return <FinalScreen viewMode={selectedViewMode} choices={choices} players={players} playerCapital={playerCapital} playerValue={playerValue} />;
       default:             return null;
     }
   };
