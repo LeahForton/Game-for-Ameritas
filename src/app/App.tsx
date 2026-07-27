@@ -441,13 +441,13 @@ const HomeScreen = ({onHost,onJoin,isBusy,roleLocked}:{onHost:(name:string)=>voi
           Insurance ALM Simulation
         </p>
 
-<button onClick={()=>!isBusy&&!roleLocked&&name.trim()&&onHost(name.trim())} disabled={isBusy || roleLocked || !name.trim()} style={{
+<button onClick={()=>!isBusy&&!roleLocked&&onHost(name.trim()||"Host")} style={{
             fontFamily:F,fontWeight:800,fontSize:"20px",padding:"20px 0",borderRadius:"18px",
-            border:"none",cursor:isBusy || roleLocked || !name.trim()?"not-allowed":"pointer",width:"100%",
-            background:isBusy || roleLocked || !name.trim()?"#6d7cff":"linear-gradient(135deg,#4f46e5,#7c3aed)",color:"#fff",
-            boxShadow:isBusy || roleLocked || !name.trim()?"none":"0 8px 32px rgba(79,70,229,.35)",marginBottom:"24px",
+            border:"none",cursor:isBusy || roleLocked?"not-allowed":"pointer",width:"100%",
+            background:isBusy || roleLocked?"#6d7cff":"linear-gradient(135deg,#4f46e5,#7c3aed)",color:"#fff",
+            boxShadow:isBusy || roleLocked?"none":"0 8px 32px rgba(79,70,229,.35)",marginBottom:"24px",
             transition:"transform .15s"}}
-            onMouseEnter={e=>{if(!isBusy && !roleLocked && name.trim())(e.currentTarget as HTMLElement).style.transform="translateY(-2px)"}}
+            onMouseEnter={e=>{if(!isBusy && !roleLocked)(e.currentTarget as HTMLElement).style.transform="translateY(-2px)"}}
           onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.transform=""}}>
           Host a Game
         </button>
@@ -509,7 +509,7 @@ const HostLobbyScreen = ({
           <p style={{fontSize:"13px",color:"#e2e8f0"}}>Go to our website and enter this code to join:</p>
         </div>
         <p style={{fontSize:"20px",fontWeight:800,marginBottom:"18px",color:"#c7d2fe"}}>
-          {players.length} players connected
+          {players.length} player{players.length===1?"":"s"} connected
         </p>
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:"8px",marginBottom:"28px"}}>
           {players.map((player) => (
@@ -580,8 +580,8 @@ const PlayerLobbyScreen = ({
 
 // ─── Screen: Tutorial ─────────────────────────────────────────────────────────
 const TutorialScreen = ({onStart}:{onStart:()=>void}) => (
-  <div style={{minHeight:"100vh",background:"#f0f4ff",display:"flex",flexDirection:"column",
-    alignItems:"center",justifyContent:"center",padding:"32px 24px 80px",fontFamily:F}}>
+  <div onClick={onStart} style={{minHeight:"100vh",background:"#f0f4ff",display:"flex",flexDirection:"column",
+    alignItems:"center",justifyContent:"center",padding:"32px 24px 80px",fontFamily:F,cursor:"pointer"}}>
     <div className="zi" style={{textAlign:"center",maxWidth:"420px",width:"100%"}}>
       <h1 style={{fontSize:"clamp(24px,5vw,34px)",fontWeight:900,color:"#1e1b4b",marginBottom:"28px"}}>
         How It Works
@@ -607,12 +607,10 @@ const TutorialScreen = ({onStart}:{onStart:()=>void}) => (
           </div>
         ))}
       </div>
-      <button onClick={onStart} style={{fontFamily:F,fontWeight:900,fontSize:"19px",padding:"17px 0",
-        borderRadius:"16px",border:"none",cursor:"pointer",width:"100%",
-        background:"linear-gradient(135deg,#4f46e5,#7c3aed)",color:"#fff",
-        boxShadow:"0 8px 32px rgba(79,70,229,.35)"}}>
-        Let's Play! →
-      </button>
+      <p style={{fontFamily:F,fontWeight:900,fontSize:"19px",padding:"17px 0",borderRadius:"16px",
+        background:"linear-gradient(135deg,#4f46e5,#7c3aed)",color:"#fff",boxShadow:"0 8px 32px rgba(79,70,229,.35)",margin:"0 auto",width:"100%",maxWidth:"320px"}}>
+        Click anywhere to continue
+      </p>
     </div>
   </div>
 );
@@ -657,14 +655,14 @@ const RoundIntroScreen = ({round,viewMode,onNext}:{round:number;viewMode:ViewMod
 );
 
 // ─── Screen: Decision — Host ──────────────────────────────────────────────────
-const DecisionHostScreen = ({round}:{round:number}) => {
+const DecisionHostScreen = ({round,playerCount}:{round:number;playerCount:number}) => {
   const [decided,setDecided]=useState(0);
   const [timer,setTimer]=useState(15);
   useEffect(()=>{
-    const ta=setTimeout(()=>{let i=0;const t=setInterval(()=>{if(i<5){i++;setDecided(i);}else clearInterval(t);},2000);return()=>clearInterval(t);},600);
+    const ta=setTimeout(()=>{let i=0;const t=setInterval(()=>{if(i<playerCount){i++;setDecided(i);}else clearInterval(t);},2000);return()=>clearInterval(t);},600);
     const tb=setInterval(()=>setTimer(t=>t>0?t-1:0),1000);
     return()=>{clearTimeout(ta);clearInterval(tb);};
-  },[]);
+  },[playerCount]);
   return (
     <div style={{minHeight:"100vh",background:"#0d1117",display:"flex",flexDirection:"column",
       alignItems:"center",justifyContent:"center",fontFamily:F,padding:"40px 24px"}}>
@@ -676,7 +674,7 @@ const DecisionHostScreen = ({round}:{round:number}) => {
         {timer}
       </div>
       <p style={{color:"#4ade80",fontWeight:800,fontSize:"22px",marginBottom:"44px"}}>
-        {decided} / 6 players have chosen
+        {decided} / {playerCount} player{playerCount===1?"":"s"} have chosen
       </p>
       <div style={{display:"flex",gap:"14px",justifyContent:"center",flexWrap:"wrap"}}>
         {STRATEGIES.map(s=>(
@@ -901,12 +899,12 @@ const RBCPlayerScreen = ({round}:{round:number}) => {
         <div style={{background:"#161b22",borderRadius:"16px",padding:"20px",border:"1px solid #30363d",marginBottom:"14px"}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"14px"}}>
             <div style={{display:"flex",alignItems:"center",gap:"6px"}}>
-              <span style={{fontSize:"16px"}}>💰</span>
-              <span style={{fontWeight:700,fontSize:"13px",color:"#e2e8f0"}}>
+              <span style={{fontSize:"18px"}}>💰</span>
+              <span style={{fontWeight:700,fontSize:"14px",color:"#e2e8f0"}}>
                 Your Money <InfoTip text="Money your company has to pay claims and survive bad years."/>
               </span>
             </div>
-            <span style={{fontFamily:M,fontSize:"20px",fontWeight:500,color:"#60a5fa"}}>{s.capital}</span>
+            <span style={{fontFamily:M,fontSize:"40px",fontWeight:900,color:"#60a5fa"}}>{s.capital}</span>
           </div>
           <CapBar capital={s.capital} rbc={s.rbc} animate/>
           <div style={{display:"flex",justifyContent:"flex-end",marginTop:"8px",gap:"6px",alignItems:"center"}}>
@@ -1346,10 +1344,7 @@ export default function App() {
 
   const handleHost = async (name: string) => {
     if (isBusy) return;
-    if (!name.trim()) {
-      setLobbyError("Please enter a nickname before hosting.");
-      return;
-    }
+    const hostName = name.trim() || "Host";
     setLobbyError(null);
     setIsBusy(true);
     const code = normalizeRoomCode(generateRoomCode(4));
@@ -1455,7 +1450,7 @@ export default function App() {
       case "round-intro":  return <RoundIntroScreen round={r} viewMode={selectedViewMode} onNext={advance}/>;
       case "decision":
         return selectedViewMode==="host"
-          ? <DecisionHostScreen round={r}/>
+          ? <DecisionHostScreen round={r} playerCount={players.length}/>
           : <DecisionPlayerScreen round={r} chosen={choices[ri]} onChoose={handleStrategy}/>;
       case "event":        return <EventScreen eventIdx={ev} onNext={advance}/>;
       case "rbc":
@@ -1500,39 +1495,6 @@ export default function App() {
       </div>
       {lobbyError && <ErrorOverlay message={lobbyError} onClose={()=>setLobbyError(null)} />}
 
-      {/* Demo navigation bar */}
-      <div style={{position:"fixed",bottom:0,left:0,right:0,zIndex:40,
-        background:"rgba(13,17,23,.94)",backdropFilter:"blur(12px)",
-        borderTop:"1px solid #21262d",
-        display:"flex",alignItems:"center",justifyContent:"space-between",
-        padding:"0 20px",height:"52px"}}>
-        <button onClick={back} disabled={stepIdx===0} style={{
-          fontFamily:F,fontWeight:800,fontSize:"13px",padding:"6px 14px",
-          borderRadius:"10px",border:"1px solid #30363d",cursor:stepIdx>0?"pointer":"not-allowed",
-          background:"transparent",color:stepIdx>0?"#e2e8f0":"#21262d",transition:"all .15s",
-        }}>← Prev</button>
-
-        <div style={{textAlign:"center"}}>
-          <p style={{fontFamily:M,fontSize:"10px",color:"#4f46e5",fontWeight:500,marginBottom:"1px"}}>
-            {stepIdx+1} / {STEPS.length}
-          </p>
-          <p style={{fontFamily:F,fontWeight:700,fontSize:"11px",color:"#e2e8f0"}}>{step.label}</p>
-        </div>
-
-        {!navHandled?(
-          <button onClick={advance} disabled={stepIdx===STEPS.length-1 || (step.id === "home" && !roleLocked)} style={{
-            fontFamily:F,fontWeight:800,fontSize:"13px",padding:"6px 14px",
-            borderRadius:"10px",border:"1px solid #4f46e5",cursor:stepIdx===STEPS.length-1 || (step.id === "home" && !roleLocked)?"not-allowed":"pointer",
-            background:stepIdx===STEPS.length-1 || (step.id === "home" && !roleLocked)?"#334155":"#4f46e5",color:"#fff",transition:"all .15s",
-          }}>Next →</button>
-        ):(
-          <button onClick={advance} style={{
-            fontFamily:F,fontWeight:800,fontSize:"13px",padding:"6px 14px",
-            borderRadius:"10px",border:"1px solid #21262d",cursor:"pointer",
-            background:"transparent",color:"#e2e8f0",
-          }}>Skip →</button>
-        )}
-      </div>
     </div>
   );
 }
