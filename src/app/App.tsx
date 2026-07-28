@@ -373,6 +373,7 @@ const STEPS: DemoStep[] = [
   {id:"rbc",          round:5,          label:"Round 5 — Final Safety Check"},
   {id:"orsa",         round:5,          label:"Round 5 — Future Planning"},
   {id:"leaderboard",  round:5,          label:"Round 5 — Final Rankings"},
+  {id:"final",        label:"🏆 Final Results"},
 ];
 
 // ─── Shared UI: RiskMeter ─────────────────────────────────────────────────────
@@ -1151,7 +1152,9 @@ const LeaderboardScreen = ({round,viewMode,companyName,players,playerId}:{round:
   }
 
   // Host: podium + list
-  const podiumOrder = sorted.slice(0,3);
+  // Display the podium visually as 2nd, 1st, 3rd while preserving
+  // the leaderboard's descending rank order everywhere else.
+  const podiumOrder = [sorted[1], sorted[0], sorted[2]].filter(Boolean);
   const podiumRank  = [2,1,3];
   const podiumH     = ["100px","140px","80px"];
 
@@ -1352,7 +1355,7 @@ const FinalScreen = ({viewMode,choices,players,yourMoney,playerValue,playerId,co
               <div style={{textAlign:"center",marginBottom:"4px"}}>
                 <div style={{fontSize:"26px"}}>{p.emoji}</div>
                 <div style={{fontWeight:800,fontSize:"13px",color:"#f0f6fc",maxWidth:"110px",wordBreak:"break-word"}}>{p.name}</div>
-                <div style={{fontFamily:M,fontSize:"13px",color:"#818cf8"}}>Value: {p.value}</div>
+                <div style={{fontFamily:M,fontSize:"13px",color:"#60a5fa"}}>Money Left: ${Number(p.capital ?? 0).toLocaleString("en-US")}</div>
                 <HealthBadge status={p.status}/>
               </div>
               <div style={{width:"110px",height:podiumH[i],borderRadius:"8px 8px 0 0",
@@ -1366,50 +1369,6 @@ const FinalScreen = ({viewMode,choices,players,yourMoney,playerValue,playerId,co
         })}
       </div>
 
-      {/* Awards */}
-      <div style={{maxWidth:"740px",width:"100%",marginBottom:"40px"}}>
-        <p style={{color:"#e2e8f0",fontWeight:700,fontSize:"11px",letterSpacing:"0.15em",marginBottom:"14px",textTransform:"uppercase"}}>Special Awards</p>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(250px,1fr))",gap:"10px"}}>
-          {[
-            {name:"Summit Mutual", emoji:"🐻",title:"🏆 Best Managed Company",  col:"#fbbf24",desc:"Steady growth — strongest reserves at the end"},
-            {name:"Apex Shield",   emoji:"🦁",title:"⭐ Strategic Thinker",      col:"#818cf8",desc:"Balanced decisions across all 5 rounds"},
-            {name:"Coastal Assure",emoji:"🌊",title:"🛡 Safest Balance Sheet",   col:"#4ade80",desc:"Conservative — resilient through every shock"},
-            {name:"Pinnacle Life", emoji:"🦅",title:"📈 Fastest Growth",         col:"#f87171",desc:"Highest company value — at regulatory cost"},
-          ].map(a=>(
-            <div key={a.name} style={{background:"#161b22",borderRadius:"14px",padding:"16px 18px",border:`1px solid ${a.col}33`}}>
-              <p style={{fontWeight:900,fontSize:"14px",color:a.col,marginBottom:"4px"}}>{a.title}</p>
-              <p style={{fontWeight:700,fontSize:"14px",color:"#f0f6fc",marginBottom:"3px"}}>{a.emoji} {a.name}</p>
-              <p style={{fontSize:"12px",color:"#e2e8f0",fontWeight:600}}>{a.desc}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Learning summary — plain English */}
-      <div style={{maxWidth:"740px",width:"100%"}}>
-        <p style={{color:"#e2e8f0",fontWeight:700,fontSize:"11px",letterSpacing:"0.15em",marginBottom:"14px",textTransform:"uppercase"}}>
-          What You Learned Today
-        </p>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:"12px"}}>
-          {[
-            {ico:"⚙️",abbr:"ERM",title:"Enterprise Risk Management",col:"#818cf8",
-             body:"Every business decision shapes your risk profile. In insurance, growth without risk management is a recipe for disaster."},
-            {ico:"🏦",abbr:"RBC",title:"Risk-Based Capital",col:"#4ade80",
-             body:"Riskier strategies need more money in reserve. Capital is your company's safety net for policyholders."},
-            {ico:"🔭",abbr:"ORSA",title:"Future Planning",col:"#f9a8d4",
-             body:"Strong companies don't just manage today's risk — they plan for tomorrow's shocks before they arrive."},
-          ].map(item=>(
-            <div key={item.abbr} style={{background:"#161b22",borderRadius:"16px",padding:"18px 20px",border:`1px solid ${item.col}33`}}>
-              <div style={{width:"38px",height:"38px",borderRadius:"10px",background:`${item.col}20`,
-                display:"flex",alignItems:"center",justifyContent:"center",fontSize:"20px",marginBottom:"10px"}}>
-                {item.ico}
-              </div>
-              <p style={{fontWeight:800,fontSize:"14px",color:"#f0f6fc",marginBottom:"5px"}}>{item.title}</p>
-              <p style={{fontSize:"13px",color:"#e2e8f0",lineHeight:1.6,fontWeight:600}}>{item.body}</p>
-            </div>
-          ))}
-        </div>
-      </div>
     </div>
   );
 };
