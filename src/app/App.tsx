@@ -1154,7 +1154,7 @@ const LeaderboardScreen = ({round,viewMode,companyName,players,playerId}:{round:
   // Host: podium + list
   // Display the podium visually as 2nd, 1st, 3rd while preserving
   // the leaderboard's descending rank order everywhere else.
-  const podiumOrder = [sorted[1], sorted[0], sorted[2]].filter(Boolean);
+  const podiumOrder = [sorted[0], sorted[1], sorted[2]].filter(Boolean);
   const podiumRank  = [2,1,3];
   const podiumH     = ["100px","140px","80px"];
 
