@@ -66,7 +66,20 @@ interface LobbyPlayer {
   id: string;
   name: string;
   capital?: number;
+  value?: number;
+  rbc?: number;
+  status?: RBCStatus;
+  emoji?: string;
 }
+
+type EnrichedLobbyPlayer = LobbyPlayer & {
+  capital: number;
+  value: number;
+  rbc: number;
+  status: RBCStatus;
+  emoji: string;
+};
+
 type KVRoomStatus = "waiting" | "started" | "finished";
 interface KVRoomState {
   status: KVRoomStatus;
@@ -449,16 +462,16 @@ const Confetti = () => {
 };
 
 // ─── Component: Player Dashboard (fixed top during game) ─────────────────────
-const PlayerDashboard = ({ step, companyName }: { step:DemoStep; companyName:string }) => {
+const PlayerDashboard = ({ step, companyName, yourMoney, playerValue, players, playerId }: { step:DemoStep; companyName:string; yourMoney:number; playerValue:number; players:LobbyPlayer[]; playerId:string|null }) => {
   if (!step.round) return null;
   const r = step.round;
   const after = ["rbc","orsa","leaderboard"].includes(step.id);
   const statsIdx = after ? r : r - 1;
-  const s = P_STATS[Math.min(statsIdx, 5)];
+  const s = { ...P_STATS[Math.min(statsIdx, 5)], capital: yourMoney, value: playerValue };
   const status = statusOf(s.capital, s.rbc);
   const {emoji,label,col} = hi(status);
-  const sorted = [...LEADERBOARD[Math.min(r-1,4)]].sort((a,b)=>b.value-a.value);
-  const rank   = sorted.findIndex(x=>x.name==="Apex Shield")+1;
+  const sorted = [...players].sort((a,b)=>(b.capital ?? 0) - (a.capital ?? 0) || a.name.localeCompare(b.name));
+  const rank = sorted.findIndex(x=>x.id===playerId)+1;
   return (
     <div style={{position:"fixed",top:0,left:0,right:0,zIndex:30,
       background:"rgba(13,17,23,.97)",backdropFilter:"blur(12px)",
@@ -702,7 +715,7 @@ const TutorialScreen = ({onStart}:{onStart:()=>void}) => (
 );
 
 // ─── Screen: Round Intro ──────────────────────────────────────────────────────
-const RoundIntroScreen = ({round,viewMode,onNext,playerCapital,playerValue}:{round:number;viewMode:ViewMode;onNext:()=>void;playerCapital:number;playerValue:number}) => (
+const RoundIntroScreen = ({round,viewMode,onNext,yourMoney,playerValue}:{round:number;viewMode:ViewMode;onNext:()=>void;yourMoney:number;playerValue:number}) => (
   <div onClick={onNext} style={{minHeight:"100vh",background:"#0d1117",display:"flex",flexDirection:"column",
     alignItems:"center",justifyContent:"center",fontFamily:F,cursor:"pointer",padding:"40px"}}>
     <div className="zi" style={{textAlign:"center"}}>
@@ -726,12 +739,16 @@ const RoundIntroScreen = ({round,viewMode,onNext,playerCapital,playerValue}:{rou
             Apex Shield — going into Round {round}
           </div>
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:"16px"}}>
-            {([["📈","Value",playerValue],["💰","Capital",playerCapital],
-               ["🛡","Min. Req.",P_STATS[round-1].rbc],["⭐","Rep.",P_STATS[round-1].rep]] as [string,string,number][]).map(([ico,lbl,val])=>(
-              <div key={lbl} style={{textAlign:"center"}}>
-                <div style={{fontSize:"20px"}}>{ico}</div>
-                <div style={{fontFamily:M,fontSize:"18px",fontWeight:500,color:"#f0f6fc"}}>{val}</div>
-                <div style={{fontSize:"10px",color:"#e2e8f0",fontWeight:700}}>{lbl}</div>
+            {([
+               {icon:<TrendIcon color="#60a5fa" />,label:"Value",val:playerValue},
+               {icon:<MoneyIcon color="#60a5fa" />,label:"Your Money",val:yourMoney},
+               {icon:<ShieldIcon color="#8b95e8" />,label:"Min. Req.",val:P_STATS[round-1].rbc},
+               {icon:<ChartIcon color="#f8fafc" />,label:"Reputation",val:P_STATS[round-1].rep},
+             ]).map((item)=>(
+              <div key={item.label} style={{textAlign:"center"}}>
+                <div style={{fontSize:"20px"}}>{item.icon}</div>
+                <div style={{fontFamily:M,fontSize:"18px",fontWeight:500,color:"#f0f6fc"}}>{item.val}</div>
+                <div style={{fontSize:"10px",color:"#e2e8f0",fontWeight:700}}>{item.label}</div>
               </div>
             ))}
           </div>
@@ -964,8 +981,8 @@ const RBCHostScreen = ({round}:{round:number}) => {
 };
 
 // ─── Screen: RBC — Player ─────────────────────────────────────────────────────
-const RBCPlayerScreen = ({round,playerCapital,playerValue}:{round:number;playerCapital:number;playerValue:number}) => {
-  const s = { ...P_STATS[round], capital: playerCapital, value: playerValue };
+const RBCPlayerScreen = ({round,yourMoney,playerValue}:{round:number;yourMoney:number;playerValue:number}) => {
+  const s = { ...P_STATS[round], capital: yourMoney, value: playerValue };
   const status = statusOf(s.capital, s.rbc);
   const {emoji,label,col,bg,desc} = hi(status);
   const msgs: Record<RBCStatus,{body:string}> = {
@@ -1106,16 +1123,18 @@ const ORSAScreen = ({round,viewMode,chosen,onChoose}:
 };
 
 // ─── Screen: Leaderboard ──────────────────────────────────────────────────────
-const LeaderboardScreen = ({round,viewMode,companyName}:{round:number;viewMode:ViewMode;companyName:string}) => {
-  const rows = LEADERBOARD[round-1]??[];
-  const sorted = [...rows].sort((a,b)=>b.value-a.value);
-  const prev   = round>1?LEADERBOARD[round-2]:null;
-  const playerRank = sorted.findIndex(r=>r.name==="Apex Shield")+1;
-  const playerRow  = sorted.find(r=>r.name==="Apex Shield");
+const LeaderboardScreen = ({round,viewMode,companyName,players,playerId}:{round:number;viewMode:ViewMode;companyName:string;players:LobbyPlayer[];playerId:string|null}) => {
+  const rbcReq = P_STATS[Math.max(0, Math.min(round-1, P_STATS.length-1))]?.rbc ?? 80;
+  const sorted = [...players].sort((a,b)=>
+    (b.capital ?? 0) - (a.capital ?? 0) || a.name.localeCompare(b.name)
+  );
+  const currentPlayer = sorted.find((p) => p.id === playerId) ?? { id: playerId ?? "", name: companyName, capital: 0 };
+  const playerRank = sorted.findIndex((p) => p.id === currentPlayer.id) + 1;
+  const playerStatus = statusOf(currentPlayer.capital ?? 0, rbcReq);
 
   if (viewMode==="player") {
     const ordinals=["","1st","2nd","3rd","4th","5th","6th"];
-    const {emoji:hEmoji,label:hLabel,col:hCol}=hi(playerRow?.status??"watch");
+    const {emoji:hEmoji,label:hLabel,col:hCol}=hi(playerStatus);
     return (
       <div style={{minHeight:"100vh",background:"#0d1117",display:"flex",alignItems:"center",
         justifyContent:"center",fontFamily:F,padding:"24px"}}>
@@ -1133,7 +1152,7 @@ const LeaderboardScreen = ({round,viewMode,companyName}:{round:number;viewMode:V
   }
 
   // Host: podium + list
-  const podiumOrder = [sorted[1],sorted[0],sorted[2]];
+  const podiumOrder = sorted.slice(0,3);
   const podiumRank  = [2,1,3];
   const podiumH     = ["100px","140px","80px"];
 
@@ -1158,7 +1177,7 @@ const LeaderboardScreen = ({round,viewMode,companyName}:{round:number;viewMode:V
               <div style={{textAlign:"center",marginBottom:"4px"}}>
                 <div style={{fontSize:"24px"}}>{p.emoji}</div>
                 <div style={{fontWeight:800,fontSize:"13px",color:"#f0f6fc",maxWidth:"110px",wordBreak:"break-word"}}>{p.name}</div>
-                <div style={{fontFamily:M,fontSize:"14px",color:"#818cf8",margin:"2px 0"}}>Value: {p.value}</div>
+                <div style={{fontFamily:M,fontSize:"14px",color:"#818cf8",margin:"2px 0"}}>Capital: {p.capital}</div>
                 <HealthBadge status={p.status}/>
               </div>
               <div style={{width:"110px",height:podiumH[i],borderRadius:"8px 8px 0 0",
@@ -1176,9 +1195,7 @@ const LeaderboardScreen = ({round,viewMode,companyName}:{round:number;viewMode:V
       {/* Remaining list */}
       <div style={{width:"100%",maxWidth:"680px",display:"flex",flexDirection:"column",gap:"8px"}}>
         {sorted.slice(3).map((p,i)=>{
-          const prevIdx = prev?prev.findIndex(r=>r.name===p.name):-1;
-          const change  = prev?prevIdx-(i+3):0;
-          const isPlayer=p.name==="Apex Shield";
+          const isPlayer = p.id === playerId;
           return (
             <div key={p.name} className="fu" style={{
               background:isPlayer?"#161b22":"#13161c",borderRadius:"14px",
@@ -1194,17 +1211,11 @@ const LeaderboardScreen = ({round,viewMode,companyName}:{round:number;viewMode:V
                 <div style={{fontWeight:800,fontSize:"15px",color:"#f0f6fc"}}>
                   {p.emoji} {isPlayer?companyName:p.name} {isPlayer&&<span style={{color:"#818cf8",fontSize:"12px"}}>(You)</span>}
                 </div>
-                {change!==0&&(
-                  <div style={{fontSize:"11px",fontWeight:700,marginTop:"2px",
-                    color:change>0?"#4ade80":"#f87171"}}>
-                    {change>0?`▲ Up ${change}`:`▼ Down ${Math.abs(change)}`}
-                  </div>
-                )}
               </div>
               <div style={{display:"flex",gap:"14px",alignItems:"center"}}>
                 <div style={{textAlign:"center"}}>
-                  <div style={{fontFamily:M,fontSize:"20px",fontWeight:500,color:"#818cf8",lineHeight:1}}>{p.value}</div>
-                  <div style={{fontSize:"10px",color:"#e2e8f0",fontWeight:700}}>VALUE</div>
+                  <div style={{fontFamily:M,fontSize:"20px",fontWeight:500,color:"#818cf8",lineHeight:1}}>{p.capital}</div>
+                  <div style={{fontSize:"10px",color:"#e2e8f0",fontWeight:700}}>MONEY</div>
                 </div>
                 <HealthBadge status={p.status}/>
               </div>
@@ -1217,20 +1228,24 @@ const LeaderboardScreen = ({round,viewMode,companyName}:{round:number;viewMode:V
 };
 
 // ─── Screen: Final Results ────────────────────────────────────────────────────
-const FinalScreen = ({viewMode,choices,players,playerCapital,playerValue}:{viewMode:ViewMode;choices:(string|null)[];players:LobbyPlayer[];playerCapital:number;playerValue:number}) => {
-  const finalSnapshot = LEADERBOARD[4].map(row =>
-    row.name === "Apex Shield"
-      ? { ...row, capital: playerCapital, value: playerValue, status: statusOf(playerCapital, P_STATS[5].rbc) }
-      : row
+const FinalScreen = ({viewMode,choices,players,yourMoney,playerValue,playerId,companyName}:{viewMode:ViewMode;choices:(string|null)[];players:LobbyPlayer[];yourMoney:number;playerValue:number;playerId:string|null;companyName:string}) => {
+  const rbcReq = P_STATS[5]?.rbc ?? 80;
+  const enrichedPlayers = players.map((player) => ({
+    ...player,
+    capital: player.capital ?? 0,
+    status: player.status ?? statusOf(player.capital ?? 0, rbcReq),
+    value: player.value ?? 0,
+    rbc: player.rbc ?? rbcReq,
+    emoji: player.emoji ?? "🏢",
+  })) as EnrichedLobbyPlayer[];
+  const sorted = [...enrichedPlayers].sort((a,b) =>
+    (b.capital ?? 0) - (a.capital ?? 0) || a.name.localeCompare(b.name)
   );
-  const sorted = [...finalSnapshot].sort((a,b) =>
-    b.value !== a.value ? b.value - a.value : b.capital - a.capital
-  );
-  const playerIdx = sorted.findIndex(r=>r.name==="Apex Shield");
-  const playerRow = sorted[playerIdx] ?? finalSnapshot.find(r => r.name === "Apex Shield");
+  const playerRow = sorted.find((p) => p.id === playerId) ?? { id: playerId ?? "", name: companyName, capital: yourMoney, status: statusOf(yourMoney, rbcReq), value: playerValue, rbc: rbcReq, emoji:"🏢" } as EnrichedLobbyPlayer;
+  const playerIdx = sorted.findIndex((p) => p.id === playerRow.id);
   const safeCount = choices.filter(c=>c==="conservative").length;
   const riskyCount= choices.filter(c=>c==="aggressive").length;
-  const playerStatus = playerRow ? statusOf(playerRow.capital, playerRow.rbc) : "watch";
+  const playerStatus = statusOf(playerRow.capital ?? yourMoney, rbcReq);
 
   const narrative = safeCount>=3
     ? "You took the cautious approach — prioritising stability over speed. Your reserves stayed healthy through every shock."
@@ -1409,13 +1424,13 @@ export default function App() {
   const [orsa,        setOrsa]        = useState<(string|null)[]>(Array(5).fill(null));
   const [companyName, setCompanyName] = useState("");
   const [roomCode,    setRoomCode]    = useState("");
-    const [players,     setPlayers]     = useState<LobbyPlayer[]>([]);
+  const [players,     setPlayers]     = useState<LobbyPlayer[]>([]);
   const [playerId,    setPlayerId]    = useState<string | null>(null);
   const [roomStatus,  setRoomStatus]  = useState<KVRoomStatus>("waiting");
   const [currentRound, setCurrentRound] = useState(1);
   const [syncedRound, setSyncedRound] = useState(1);
   const [isFinished, setIsFinished] = useState(false);
-  const [playerCapital, setPlayerCapital] = useState(100);
+  const [yourMoney, setYourMoney] = useState(100);
   const [playerValue, setPlayerValue] = useState(0);
   const [isHost,      setIsHost]      = useState(false);
   const [lobbyError,  setLobbyError]  = useState<string | null>(null);
@@ -1429,10 +1444,17 @@ export default function App() {
     try {
       const nextPlayers = await fetchPlayersFromKV(code);
       const roomState = await fetchRoomStatusFromKV(code);
-      setPlayers((nextPlayers ?? []).map((player) => ({
+      const normalizedPlayers = (nextPlayers ?? []).map((player) => ({
         ...player,
         capital: player.capital ?? 100,
-      })));
+      }));
+      setPlayers(normalizedPlayers);
+      if (playerId) {
+        const localPlayer = normalizedPlayers.find((player) => player.id === playerId);
+        if (localPlayer?.capital !== undefined && localPlayer.capital !== yourMoney) {
+          setYourMoney(localPlayer.capital);
+        }
+      }
       setRoomStatus(roomState.status);
       setCurrentRound(roomState.current_round);
       setIsFinished(roomState.status === "finished");
@@ -1515,7 +1537,7 @@ export default function App() {
       setRoomStatus("waiting");
       setPlayerId(result?.playerId ?? null);
       setPlayers([{ id: result?.playerId ?? "host", name: name.trim(), capital: 100 }]);
-      setPlayerCapital(100);
+      setYourMoney(100);
       setPlayerValue(0);
       setStepIdx(STEPS.findIndex(item => item.id === "host-lobby"));
     } catch (error) {
@@ -1548,7 +1570,7 @@ export default function App() {
       setRoleLocked(true);
       setRoomStatus("waiting");
       setPlayerId(result?.playerId ?? null);
-      setPlayerCapital(100);
+      setYourMoney(100);
       setPlayerValue(0);
       setStepIdx(STEPS.findIndex(item => item.id === "player-lobby"));
     } catch (error) {
@@ -1601,40 +1623,45 @@ export default function App() {
     }
   };
 
-  const syncPlayerCapital = async (capital: number) => {
+  const syncYourMoneyToKV = async (money: number) => {
     if (!roomCode || !playerId) return;
     try {
-      await updatePlayerCapitalInKV(roomCode, playerId, capital);
+      await updatePlayerCapitalInKV(roomCode, playerId, money);
     } catch (error) {
-      console.warn("Failed to sync player capital", error);
+      console.warn("Failed to sync your money", error);
     }
   };
 
+  const setYourMoneyAndSync = (money: number) => {
+    setYourMoney(money);
+    if (!roomCode || !playerId) return;
+    syncYourMoneyToKV(money);
+  };
+
   const handleStrategy = (id:string) => {
-    const previousCapital = playerCapital;
+    const previousMoney = yourMoney;
     const valueDelta = getStrategyValueDelta(id);
-    const capitalDelta = getStrategyCapitalDelta(id);
-    const nextCapital = previousCapital + capitalDelta;
+    const moneyDelta = getStrategyCapitalDelta(id);
+    const nextMoney = previousMoney + moneyDelta;
 
     console.log("--- ENGINE MATH DICTIONARY ---");
-    console.log("Previous Capital:", previousCapital);
-    console.log("Choice Multiplier / Delta:", { choice:id, valueDelta, capitalDelta });
-    console.log("New Capital Computed:", nextCapital);
+    console.log("Previous Money:", previousMoney);
+    console.log("Choice Multiplier / Delta:", { choice:id, valueDelta, moneyDelta });
+    console.log("New Money Computed:", nextMoney);
 
-    setPlayerCapital(nextCapital);
+    setYourMoneyAndSync(nextMoney);
     setPlayerValue((prev) => prev + valueDelta);
-    syncPlayerCapital(nextCapital);
 
     const ri=(step.round??1)-1;
     setChoices(prev=>{const n=[...prev];n[ri]=id;return n;});
     setTimeout(advance,700);
   };
   const handleOrsa = (id:string) => {
-    const previousCapital = playerCapital;
+    const previousMoney = yourMoney;
     console.log("--- ENGINE MATH DICTIONARY ---");
-    console.log("Previous Capital:", previousCapital);
-    console.log("Choice Multiplier / Delta:", { orsaChoice:id, capitalDelta:0 });
-    console.log("New Capital Computed:", previousCapital);
+    console.log("Previous Money:", previousMoney);
+    console.log("Choice Multiplier / Delta:", { orsaChoice:id, moneyDelta:0 });
+    console.log("New Money Computed:", previousMoney);
 
     const ri=(step.round??1)-1;
     setOrsa(prev=>{const n=[...prev];n[ri]=id;return n;});
@@ -1651,65 +1678,76 @@ export default function App() {
   const ev         = step.eventIdx??0;
 
   const renderScreen = () => {
-    switch(step.id){
+    switch (step.id) {
       case "home":
-        return roleLocked
-          ? isHost
-            ? <HostLobbyScreen roomCode={roomCode} players={players} onStart={handleStart} error={lobbyError}/>
-            : <PlayerLobbyScreen roomCode={roomCode} companyName={companyName} players={players} started={roomStatus === "started"}/>
-          : <HomeScreen onHost={handleHost} onJoin={handleJoin} isBusy={isBusy} roleLocked={roleLocked}/>;
-      case "host-lobby":   return <HostLobbyScreen roomCode={roomCode} players={players} onStart={handleStart} error={lobbyError}/>;
-      case "player-lobby": return <PlayerLobbyScreen roomCode={roomCode} companyName={companyName} players={players} started={roomStatus === "started"}/>;
-      case "tutorial":     return <TutorialScreen onStart={advance}/>;
-      case "round-intro":  return <RoundIntroScreen round={r} viewMode={selectedViewMode} playerCapital={playerCapital} playerValue={playerValue} onNext={advance}/>;
+        return roleLocked ? (
+          isHost ? (
+            <HostLobbyScreen roomCode={roomCode} players={players} onStart={handleStart} error={lobbyError} />
+          ) : (
+            <PlayerLobbyScreen roomCode={roomCode} companyName={companyName} players={players} started={roomStatus === "started"} />
+          )
+        ) : (
+          <HomeScreen onHost={handleHost} onJoin={handleJoin} isBusy={isBusy} roleLocked={roleLocked} />
+        );
+      case "host-lobby":
+        return <HostLobbyScreen roomCode={roomCode} players={players} onStart={handleStart} error={lobbyError} />;
+      case "player-lobby":
+        return <PlayerLobbyScreen roomCode={roomCode} companyName={companyName} players={players} started={roomStatus === "started"} />;
+      case "tutorial":
+        return <TutorialScreen onStart={advance} />;
+      case "round-intro":
+        return <RoundIntroScreen round={r} viewMode={selectedViewMode} yourMoney={yourMoney} playerValue={playerValue} onNext={advance} />;
       case "decision":
-        return selectedViewMode==="host"
-          ? <DecisionHostScreen round={r} playerCount={players.length}/>
-          : <DecisionPlayerScreen round={r} chosen={choices[ri]} onChoose={handleStrategy}/>;
-      case "event":        return <EventScreen eventIdx={ev} strategy={choices[ri]} impactDelta={getEventImpactForStrategy(choices[ri], ev)} onApplyImpact={(delta:number)=>{
-          if (!delta) return;
-          setPlayerCapital((prev) => {
-            const next = prev + delta;
-            console.log("--- ENGINE MATH DICTIONARY ---");
-            console.log("Previous Capital:", prev);
-            console.log("Choice Multiplier / Delta:", { eventIdx: ev, delta });
-            console.log("New Capital Computed:", next);
-            syncPlayerCapital(next);
-            return next;
-          });
-        }} onNext={advance}/>;
+        return selectedViewMode === "host" ? (
+          <DecisionHostScreen round={r} playerCount={players.length} />
+        ) : (
+          <DecisionPlayerScreen round={r} chosen={choices[ri]} onChoose={handleStrategy} />
+        );
+      case "event":
+        return (
+          <EventScreen
+            eventIdx={ev}
+            strategy={choices[ri]}
+            impactDelta={getEventImpactForStrategy(choices[ri], ev)}
+            onApplyImpact={(delta: number) => {
+              if (!delta) return;
+              const nextMoney = yourMoney + delta;
+              console.log("--- ENGINE MATH DICTIONARY ---");
+              console.log("Previous Money:", yourMoney);
+              console.log("Event Impact / Delta:", { eventIdx: ev, delta });
+              console.log("New Money Computed:", nextMoney);
+              setYourMoneyAndSync(nextMoney);
+            }}
+            onNext={advance}
+          />
+        );
       case "rbc":
-        return selectedViewMode==="host"
-          ? <RBCHostScreen round={r}/>
-          : <RBCPlayerScreen round={r} playerCapital={playerCapital} playerValue={playerValue}/>;
-      case "orsa":         return <ORSAScreen round={r} viewMode={selectedViewMode} chosen={orsa[ri]} onChoose={handleOrsa}/>;
-      case "leaderboard":  return <LeaderboardScreen round={r} viewMode={selectedViewMode} companyName={companyName}/>;
-      case "final":        return <FinalScreen viewMode={selectedViewMode} choices={choices} players={players} playerCapital={playerCapital} playerValue={playerValue} />;
-      default:             return null;
+        return selectedViewMode === "host" ? <RBCHostScreen round={r} /> : <RBCPlayerScreen round={r} yourMoney={yourMoney} playerValue={playerValue} />;
+      case "orsa":
+        return <ORSAScreen round={r} viewMode={selectedViewMode} chosen={orsa[ri]} onChoose={handleOrsa} />;
+      case "leaderboard":
+        return <LeaderboardScreen round={r} viewMode={selectedViewMode} companyName={companyName} players={players} playerId={playerId} />;
+      case "final":
+        return <FinalScreen viewMode={selectedViewMode} choices={choices} players={players} yourMoney={yourMoney} playerValue={playerValue} playerId={playerId} companyName={companyName} />;
+      default:
+        return null;
     }
   };
 
   return (
-    <div style={{width:"100%",minHeight:"100vh",fontFamily:F,position:"relative",background:"#0d1117"}}>
+    <div style={{ width: "100%", minHeight: "100vh", fontFamily: F, position: "relative", background: "#0d1117" }}>
       <style>{CSS}</style>
-
+      
       {/* Player persistent dashboard */}
-      {showDash && <PlayerDashboard step={step} companyName={companyName}/>}
-
+      {showDash && <PlayerDashboard step={step} companyName={companyName} yourMoney={yourMoney} playerValue={playerValue} players={players} playerId={playerId} />}
+      
       {/* Host round control */}
       {isHost && selectedViewMode === "host" && roomStatus === "started" && (
-        <div style={{position:"fixed",top:0,left:0,right:0,zIndex:40,
-          display:"flex",alignItems:"center",justifyContent:"space-between",
-          padding:"10px 16px",background:"rgba(13,17,23,.95)",backdropFilter:"blur(12px)",borderBottom:"1px solid #21262d"}}>
-          <div style={{color:"#c7d2fe",fontWeight:700,fontSize:"14px"}}>
+        <div style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 40, display: "flex", alignItems: "center", justifyBetween: "space-between", padding: "10px 16px", background: "rgba(13,17,23,.95)", backdropFilter: "blur(12px)", borderBottom: "1px solid #21262d" }}>
+          <div style={{ color: "#c7d2fe", fontWeight: 700, fontSize: "14px" }}>
             Host Control — Current Round {currentRound}
           </div>
-          <button onClick={handleNextRound} disabled={isBusy} style={{
-            fontFamily:F,fontWeight:800,fontSize:"13px",padding:"10px 14px",
-            borderRadius:"999px",border:"none",cursor:isBusy?"not-allowed":"pointer",
-            background:isBusy?"#30363d":"linear-gradient(135deg,#4f46e5,#7c3aed)",
-            color:"#fff",boxShadow:isBusy?"none":"0 8px 24px rgba(79,70,229,.24)",transition:"transform .2s"
-          }}>
+          <button onClick={handleNextRound} disabled={isBusy} style={{ fontFamily: F, fontWeight: 800, fontSize: "13px", padding: "10px 14px", borderRadius: "999px", border: "none", cursor: isBusy ? "not-allowed" : "pointer", background: isBusy ? "#30363d" : "linear-gradient(135deg,#4f46e5,#7c3aed)", color: "#fff", boxShadow: isBusy ? "none" : "0 8px 24px rgba(79,70,229,.24)", transition: "transform .2s" }}>
             {isBusy ? "Advancing…" : "Advance Round"}
           </button>
         </div>
@@ -1717,49 +1755,47 @@ export default function App() {
 
       {/* Host/Player toggle (game phases) */}
       {isGamePhase && !roleLocked && (
-        <div style={{position:"fixed",top:"10px",right:"14px",zIndex:50,
-          display:"flex",background:"rgba(13,17,23,.88)",borderRadius:"999px",
-          padding:"3px",border:"1px solid #30363d",backdropFilter:"blur(8px)"}}>
-          {(["host","player"] as ViewMode[]).map(v=>(
-            <button key={v} onClick={()=>setViewMode(v)} style={{
-              fontFamily:F,fontWeight:800,fontSize:"12px",padding:"6px 14px",
-              borderRadius:"999px",border:"none",cursor:"pointer",
-              background:viewMode===v?"#4f46e5":"transparent",
-              color:viewMode===v?"#fff":"#8b949e",transition:"all .2s",
-            }}>
-              {v==="host"?"Host":"Player"}
+        <div style={{ position: "fixed", top: "10px", right: "14px", zIndex: 50, display: "flex", background: "rgba(13,17,23,.88)", borderRadius: "999px", padding: "3px", border: "1px solid #30363d", backdropFilter: "blur(8px)" }}>
+          {(["host", "player"] as ViewMode[]).map(v => (
+            <button key={v} onClick={() => setViewMode(v)} style={{ fontFamily: F, fontWeight: 800, fontSize: "12px", padding: "6px 14px", borderRadius: "999px", border: "none", cursor: "pointer", background: viewMode === v ? "#4f46e5" : "transparent", color: viewMode === v ? "#fff" : "#8b949e", transition: "all .2s" }}>
+              {v === "host" ? "Host" : "Player"}
             </button>
           ))}
         </div>
       )}
 
       {/* Screen content */}
-      <div style={{paddingTop:showDash?"54px":"0",paddingBottom:"60px"}}>
+      <div style={{ paddingTop: showDash ? "54px" : "0", paddingBottom: "60px" }}>
         {isHost && selectedViewMode === "host" && roomStatus === "started" ? (
-          <div style={{display:"grid",gridTemplateColumns:"1fr 320px",gap:"24px",padding:"24px 18px",maxWidth:"1280px",margin:"0 auto"}}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: "24px", padding: "24px 18px", maxWidth: "1280px", margin: "0 auto" }}>
             <div>{renderScreen()}</div>
-            <div style={{background:"rgba(15,23,42,.95)",border:"1px solid #334155",borderRadius:"24px",padding:"22px 20px",minWidth:"280px",alignSelf:"start"}}>
-              <div style={{display:"flex",alignItems:"center",gap:"10px",marginBottom:"18px"}}>
+            <div style={{ background: "rgba(15,23,42,.95)", border: "1px solid #334155", borderRadius: "24px", padding: "22px 20px", minWidth: "280px", alignSelf: "start" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "18px" }}>
                 <GroupIcon color="#c7d2fe" />
                 <div>
-                  <p style={{margin:0,fontSize:"12px",fontWeight:700,color:"#94a3b8",letterSpacing:"0.14em",textTransform:"uppercase"}}>Live Company Performance</p>
-                  <p style={{margin:0,fontSize:"16px",fontWeight:900,color:"#f8fafc"}}>Performance Ticker</p>
+                  <p style={{ margin: 0, fontSize: "12px", fontWeight: 700, color: "#94a3b8", letterSpacing: "0.14em", textTransform: "uppercase" }}>Live Company Performance</p>
+                  <p style={{ margin: 0, fontSize: "16px", fontWeight: 900, color: "#f8fafc" }}>Performance Ticker</p>
                 </div>
               </div>
-              <div style={{display:"grid",gap:"12px"}}>
-                {players.map((player) => (
-                  <div key={player.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",
-                    padding:"14px 16px",borderRadius:"16px",background:"#111827",border:"1px solid #1f2937"}}>
-                    <div>
-                      <p style={{margin:0,fontSize:"14px",fontWeight:800,color:"#f8fafc"}}>{player.name}</p>
-                      <p style={{margin:0,fontSize:"11px",color:"#94a3b8",fontWeight:600}}>Capital</p>
-                    </div>
-                    <div style={{display:"flex",alignItems:"center",gap:"6px"}}>
+              
+              <div style={{ display: "grid", gap: "12px" }}>
+                {(players || [])
+                  .sort((a, b) => (b.yourMoney || b.capital || 0) - (a.yourMoney || a.capital || 0))
+                  .map((player) => (
+                    <div key={player.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 16px", borderRadius: "16px", background: "#111827", border: "1px solid #1f2937" }}>
+                      <div>
+                        <p style={{ margin: 0, fontSize: "14px", fontWeight: 800, color: "#f8fafc" }}>{player.player_name || player.name}</p>
+                        <p style={{ margin: 0, fontSize: "11px", color: "#94a3b8", fontWeight: 600 }}>Active Player</p>
+                      </div>
                       <MoneyIcon color="#60a5fa" />
-                      <span style={{fontSize:"15px",fontWeight:900,color:"#fff"}}>{(player.capital ?? 100).toLocaleString()}</span>
+                      <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "2px" }}>
+                        <span style={{ fontSize: "11px", color: "#94a3b8", fontWeight: 600, textTransform: "uppercase" }}>Your Money</span>
+                        <span style={{ fontSize: "15px", fontWeight: 900, color: "#fff" }}>
+                          ${(player.yourMoney ?? player.capital ?? 100000).toLocaleString()}
+                        </span>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
               </div>
             </div>
           </div>
@@ -1767,8 +1803,10 @@ export default function App() {
           renderScreen()
         )}
       </div>
-      {lobbyError && <ErrorOverlay message={lobbyError} onClose={()=>setLobbyError(null)} />}
-
+      
+      {lobbyError ? <ErrorOverlay message={lobbyError} onClose={() => setLobbyError(null)} /> : null}
     </div>
   );
-}
+};
+
+export default App;
