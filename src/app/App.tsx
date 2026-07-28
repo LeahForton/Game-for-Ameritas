@@ -1232,7 +1232,13 @@ const LeaderboardScreen = ({round,viewMode,companyName,players,playerId}:{round:
 // ─── Screen: Final Results ────────────────────────────────────────────────────
 const FinalScreen = ({viewMode,choices,players,yourMoney,playerValue,playerId,companyName}:{viewMode:ViewMode;choices:(string|null)[];players:LobbyPlayer[];yourMoney:number;playerValue:number;playerId:string|null;companyName:string}) => {
   const rbcReq = P_STATS[5]?.rbc ?? 80;
-  const enrichedPlayers = players.map((player) => ({
+  // On the host view, playerId identifies the room host. Exclude that
+  // record before ranking so the host can never occupy a podium position.
+  const leaderboardPlayers = viewMode === "host" && playerId
+    ? players.filter((player) => player.id !== playerId)
+    : players;
+
+  const enrichedPlayers = leaderboardPlayers.map((player) => ({
     ...player,
     capital: player.capital ?? 0,
     status: player.status ?? statusOf(player.capital ?? 0, rbcReq),
