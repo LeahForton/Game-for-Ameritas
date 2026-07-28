@@ -1369,6 +1369,11 @@ const FinalScreen = ({viewMode,choices,players,yourMoney,playerValue,playerId,co
         })}
       </div>
 
+      {podiumOrder.length === 0 && (
+        <div style={{color:"#e2e8f0",fontWeight:700,fontSize:"16px",textAlign:"center"}}>
+          No player results are available yet.
+        </div>
+      )}
     </div>
   );
 };
