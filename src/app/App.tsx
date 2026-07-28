@@ -373,7 +373,6 @@ const STEPS: DemoStep[] = [
   {id:"rbc",          round:5,          label:"Round 5 — Final Safety Check"},
   {id:"orsa",         round:5,          label:"Round 5 — Future Planning"},
   {id:"leaderboard",  round:5,          label:"Round 5 — Final Rankings"},
-  {id:"final",        label:"🏆 Final Results"},
 ];
 
 // ─── Shared UI: RiskMeter ─────────────────────────────────────────────────────
@@ -1152,9 +1151,7 @@ const LeaderboardScreen = ({round,viewMode,companyName,players,playerId}:{round:
   }
 
   // Host: podium + list
-  // Display the podium visually as 2nd, 1st, 3rd while preserving
-  // the leaderboard's descending rank order everywhere else.
-  const podiumOrder = [sorted[0], sorted[1], sorted[2]].filter(Boolean);
+  const podiumOrder = sorted.slice(0,3);
   const podiumRank  = [2,1,3];
   const podiumH     = ["100px","140px","80px"];
 
