@@ -1728,7 +1728,7 @@ export default function App() {
       case "leaderboard":
         return <LeaderboardScreen round={r} viewMode={selectedViewMode} companyName={companyName} players={players} playerId={playerId} />;
       case "final":
-        return <FinalScreen viewMode={selectedViewMode} choices={choices} players={players} yourMoney={yourMoney} playerValue={playerValue} playerId={playerId} companyName={companyName} />;
+        return <LeaderboardScreen round={5} viewMode="host" companyName={companyName} players={players} playerId={playerId} />;
       default:
         return null;
     }
