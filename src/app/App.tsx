@@ -1,97 +1,4 @@
 
-Today 2:24 PM
-
-App (1).tsx
-TypeScript
-Can you change it so that the end screen only displays the leaderboard and that it matches what the players see at the end? 
-
-Worked for 1m 10s
-The previous edit was based on the cumulatively modified file and could leave the podium with an empty player array, causing it to render no entries.
-
-I rebuilt the change from the earlier working repository version. This version:
-
-Keeps the final podium screen.
-
-Displays Money Left instead of value.
-
-Removes the awards and “What You Learned” sections.
-
-Preserves the corrected 2nd, 1st, 3rd podium arrangement.
-
-Displays a message rather than a blank screen if player results have not loaded.
-
-App-podium-fixed.tsx
-
-Download the patch
-
-
-Can you make it so that the host cannot show up on the podium?
-
-Worked for 21s
-Done. On the host podium screen, the host’s player record is now filtered out before sorting, so the host cannot take a podium position or affect player rankings.
-
-App-podium-no-host.tsx
-
-Download the Git patch
-
-
-The host is still there.
-
-Worked for 54s
-The earlier fix only filtered by playerId, but the host ID is not always returned under that exact field. I changed the logic so host-facing leaderboards exclude the host using several reliable checks:
-
-The returned host ID, including playerId, id, or hostId.
-
-The host’s entered name.
-
-Fallback records whose ID or name is literally "host".
-
-The host is no longer inserted into the local player list when the room is created.
-
-This filtering is applied to both the regular round leaderboard and the final podium.
-
-App-host-fully-excluded.tsx
-
-Download the Git patch
-
-
-Can you remove company value as a stored thing?
-
-Worked for 1m 9s
-Removed company value as a stored game value.
-
-The update removes:
-
-value from LobbyPlayer, PlayerRow, and enriched player records.
-
-The playerValue React state and all updates to it.
-
-Company value from dashboards, round-intro screens, safety screens, and final results.
-
-Value fields from the static leaderboard and player-stat data.
-
-The value-to-money conversion calculation.
-
-Strategy choices now directly award money:
-
-Safe Choice: +$5
-
-Balanced Choice: +$10
-
-Risky Choice: +$20
-
-Remaining money is now the only persisted ranking value. Any old value fields that may already exist in stored room records will simply be ignored by this version.
-
-App-no-company-value.tsx
-
-Download the Git patch
-
-
-Library
-/
-App-no-company-value.tsx
-
-
 import { useState, useEffect } from "react";
 
 const F = "'Nunito', sans-serif";
@@ -1350,82 +1257,16 @@ const FinalScreen = ({viewMode,choices,players,yourMoney,playerId,companyName}:{
     (b.capital ?? 0) - (a.capital ?? 0) || a.name.localeCompare(b.name)
   );
   const playerRow = sorted.find((p) => p.id === playerId) ?? { id: playerId ?? "", name: companyName, capital: yourMoney, status: statusOf(yourMoney, rbcReq), rbc: rbcReq, emoji:"🏢" } as EnrichedLobbyPlayer;
-  const playerIdx = sorted.findIndex((p) => p.id === playerRow.id);
-  const safeCount = choices.filter(c=>c==="conservative").length;
-  const riskyCount= choices.filter(c=>c==="aggressive").length;
-  const playerStatus = statusOf(playerRow.capital ?? yourMoney, rbcReq);
-
-  const narrative = safeCount>=3
-    ? "You took the cautious approach — prioritising stability over speed. Your reserves stayed healthy through every shock."
-    : riskyCount>=3
-    ? "You pursued an aggressive strategy that stretched your reserves thin."
-    : "You kept a steady hand — growing consistently while managing exposure. Balanced strategy paid off.";
-
-  const narrativeTitle = safeCount>=3?"🐢 Steady Hand":riskyCount>=3?"🚀 High Roller":"⚖️ Strategic Thinker";
-
-  const achievements = [
-    {icon:"🏆",label:"Long-Term Thinker",     desc:"Completed all Future Planning challenges",  earned:true},
-    {icon:"🛡",label:"Risk Manager",            desc:"Never entered the danger zone",             earned:playerStatus!=="intervention"},
-    {icon:"⭐",label:"Strategic Thinker",       desc:"Made balanced decisions throughout",       earned:!safeCount||!riskyCount?false:(safeCount>=1&&riskyCount>=1)},
-  ];
-
   if (viewMode==="player") return (
     <div style={{minHeight:"100vh",background:"#0d1117",display:"flex",flexDirection:"column",
-      alignItems:"center",justifyContent:"flex-start",fontFamily:F,padding:"32px 24px 80px"}}>
+      alignItems:"center",justifyContent:"center",fontFamily:F,padding:"32px 24px"}}>
       <Confetti/>
       <div className="zi" style={{maxWidth:"420px",width:"100%",textAlign:"center"}}>
         <div style={{fontSize:"52px",marginBottom:"8px"}}>🎉</div>
-        <h2 style={{fontSize:"32px",fontWeight:900,color:"#f0f6fc",marginBottom:"4px"}}>Game Over!</h2>
-        <p style={{color:"#818cf8",fontWeight:700,fontSize:"16px",marginBottom:"24px"}}>{narrativeTitle}</p>
-
-        {/* Final card */}
-        <div style={{background:"#161b22",borderRadius:"20px",padding:"22px",
-          border:"1px solid #4f46e5aa",marginBottom:"20px"}}>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px",marginBottom:"14px"}}>
-            {([["💰","Money Left",playerRow?.capital??0,"#60a5fa"],
-               ["🏆","Final Rank",`#${playerIdx+1}`,"#fbbf24"],
-               ["⭐","Reputation",P_STATS[5].rep,"#c084fc"]] as [string,string,string|number,string][]).map(([ic,lb,vl,col])=>(
-              <div key={lb} style={{background:"#0d1117",borderRadius:"10px",padding:"12px"}}>
-                <div style={{fontSize:"22px",marginBottom:"4px"}}>{ic}</div>
-                <div style={{fontFamily:M,fontSize:"20px",fontWeight:500,color:col,lineHeight:1}}>{vl}</div>
-                <div style={{fontSize:"10px",fontWeight:700,color:"#e2e8f0",marginTop:"2px"}}>{lb}</div>
-              </div>
-            ))}
-          </div>
-          <HealthBadge status={playerRow?.status??"watch"} large/>
-        </div>
-
-        {/* Narrative */}
-        <div style={{background:"linear-gradient(135deg,#161b22,#1e2437)",borderRadius:"16px",
-          padding:"18px 20px",border:"1px solid #4f46e5aa",marginBottom:"20px",textAlign:"left"}}>
-          <p style={{fontWeight:900,fontSize:"13px",color:"#818cf8",marginBottom:"8px",letterSpacing:"0.05em"}}>
-            📖 YOUR STORY
-          </p>
-          <p style={{fontSize:"14px",color:"#e2e8f0",lineHeight:1.65,fontWeight:600,fontStyle:"italic"}}>
-            "{narrative}"
-          </p>
-        </div>
-
-        {/* Achievements */}
-        <div style={{textAlign:"left",marginBottom:"20px"}}>
-          <p style={{fontWeight:900,fontSize:"12px",color:"#e2e8f0",letterSpacing:"0.1em",marginBottom:"10px"}}>
-            ACHIEVEMENTS
-          </p>
-          <div style={{display:"flex",flexDirection:"column",gap:"8px"}}>
-            {achievements.map(a=>(
-              <div key={a.label} style={{background:"#161b22",borderRadius:"12px",padding:"12px 14px",
-                border:`1px solid ${a.earned?"#fbbf2444":"#21262d"}`,
-                display:"flex",alignItems:"center",gap:"12px",opacity:a.earned?1:0.4}}>
-                <span style={{fontSize:"22px"}}>{a.icon}</span>
-                <div>
-                  <div style={{fontWeight:800,fontSize:"13px",color:a.earned?"#fbbf24":"#8b949e"}}>{a.label}</div>
-                  <div style={{fontSize:"11px",color:"#e2e8f0",fontWeight:600}}>{a.desc}</div>
-                </div>
-                {a.earned&&<span style={{marginLeft:"auto",fontSize:"16px"}}>✅</span>}
-              </div>
-            ))}
-          </div>
-        </div>
+        <h2 style={{fontSize:"32px",fontWeight:900,color:"#f0f6fc",marginBottom:"8px"}}>Game Over!</h2>
+        <p style={{color:"#e2e8f0",fontWeight:700,fontSize:"16px"}}>
+          Final rankings are shown on the host screen.
+        </p>
       </div>
     </div>
   );
@@ -1473,7 +1314,7 @@ const FinalScreen = ({viewMode,choices,players,yourMoney,playerId,companyName}:{
         })}
       </div>
 
-      {podiumOrder.length === 0 && (
+      {sorted.length === 0 && (
         <div style={{color:"#e2e8f0",fontWeight:700,fontSize:"16px",textAlign:"center"}}>
           No player results are available yet.
         </div>
@@ -1875,7 +1716,7 @@ export default function App() {
 };
 Library
 /
-App-no-company-value.tsx
+App-no-final-value-section.tsx
 
 
 import { useState, useEffect } from "react";
@@ -3136,82 +2977,16 @@ const FinalScreen = ({viewMode,choices,players,yourMoney,playerId,companyName}:{
     (b.capital ?? 0) - (a.capital ?? 0) || a.name.localeCompare(b.name)
   );
   const playerRow = sorted.find((p) => p.id === playerId) ?? { id: playerId ?? "", name: companyName, capital: yourMoney, status: statusOf(yourMoney, rbcReq), rbc: rbcReq, emoji:"🏢" } as EnrichedLobbyPlayer;
-  const playerIdx = sorted.findIndex((p) => p.id === playerRow.id);
-  const safeCount = choices.filter(c=>c==="conservative").length;
-  const riskyCount= choices.filter(c=>c==="aggressive").length;
-  const playerStatus = statusOf(playerRow.capital ?? yourMoney, rbcReq);
-
-  const narrative = safeCount>=3
-    ? "You took the cautious approach — prioritising stability over speed. Your reserves stayed healthy through every shock."
-    : riskyCount>=3
-    ? "You pursued an aggressive strategy that stretched your reserves thin."
-    : "You kept a steady hand — growing consistently while managing exposure. Balanced strategy paid off.";
-
-  const narrativeTitle = safeCount>=3?"🐢 Steady Hand":riskyCount>=3?"🚀 High Roller":"⚖️ Strategic Thinker";
-
-  const achievements = [
-    {icon:"🏆",label:"Long-Term Thinker",     desc:"Completed all Future Planning challenges",  earned:true},
-    {icon:"🛡",label:"Risk Manager",            desc:"Never entered the danger zone",             earned:playerStatus!=="intervention"},
-    {icon:"⭐",label:"Strategic Thinker",       desc:"Made balanced decisions throughout",       earned:!safeCount||!riskyCount?false:(safeCount>=1&&riskyCount>=1)},
-  ];
-
   if (viewMode==="player") return (
     <div style={{minHeight:"100vh",background:"#0d1117",display:"flex",flexDirection:"column",
-      alignItems:"center",justifyContent:"flex-start",fontFamily:F,padding:"32px 24px 80px"}}>
+      alignItems:"center",justifyContent:"center",fontFamily:F,padding:"32px 24px"}}>
       <Confetti/>
       <div className="zi" style={{maxWidth:"420px",width:"100%",textAlign:"center"}}>
         <div style={{fontSize:"52px",marginBottom:"8px"}}>🎉</div>
-        <h2 style={{fontSize:"32px",fontWeight:900,color:"#f0f6fc",marginBottom:"4px"}}>Game Over!</h2>
-        <p style={{color:"#818cf8",fontWeight:700,fontSize:"16px",marginBottom:"24px"}}>{narrativeTitle}</p>
-
-        {/* Final card */}
-        <div style={{background:"#161b22",borderRadius:"20px",padding:"22px",
-          border:"1px solid #4f46e5aa",marginBottom:"20px"}}>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px",marginBottom:"14px"}}>
-            {([["💰","Money Left",playerRow?.capital??0,"#60a5fa"],
-               ["🏆","Final Rank",`#${playerIdx+1}`,"#fbbf24"],
-               ["⭐","Reputation",P_STATS[5].rep,"#c084fc"]] as [string,string,string|number,string][]).map(([ic,lb,vl,col])=>(
-              <div key={lb} style={{background:"#0d1117",borderRadius:"10px",padding:"12px"}}>
-                <div style={{fontSize:"22px",marginBottom:"4px"}}>{ic}</div>
-                <div style={{fontFamily:M,fontSize:"20px",fontWeight:500,color:col,lineHeight:1}}>{vl}</div>
-                <div style={{fontSize:"10px",fontWeight:700,color:"#e2e8f0",marginTop:"2px"}}>{lb}</div>
-              </div>
-            ))}
-          </div>
-          <HealthBadge status={playerRow?.status??"watch"} large/>
-        </div>
-
-        {/* Narrative */}
-        <div style={{background:"linear-gradient(135deg,#161b22,#1e2437)",borderRadius:"16px",
-          padding:"18px 20px",border:"1px solid #4f46e5aa",marginBottom:"20px",textAlign:"left"}}>
-          <p style={{fontWeight:900,fontSize:"13px",color:"#818cf8",marginBottom:"8px",letterSpacing:"0.05em"}}>
-            📖 YOUR STORY
-          </p>
-          <p style={{fontSize:"14px",color:"#e2e8f0",lineHeight:1.65,fontWeight:600,fontStyle:"italic"}}>
-            "{narrative}"
-          </p>
-        </div>
-
-        {/* Achievements */}
-        <div style={{textAlign:"left",marginBottom:"20px"}}>
-          <p style={{fontWeight:900,fontSize:"12px",color:"#e2e8f0",letterSpacing:"0.1em",marginBottom:"10px"}}>
-            ACHIEVEMENTS
-          </p>
-          <div style={{display:"flex",flexDirection:"column",gap:"8px"}}>
-            {achievements.map(a=>(
-              <div key={a.label} style={{background:"#161b22",borderRadius:"12px",padding:"12px 14px",
-                border:`1px solid ${a.earned?"#fbbf2444":"#21262d"}`,
-                display:"flex",alignItems:"center",gap:"12px",opacity:a.earned?1:0.4}}>
-                <span style={{fontSize:"22px"}}>{a.icon}</span>
-                <div>
-                  <div style={{fontWeight:800,fontSize:"13px",color:a.earned?"#fbbf24":"#8b949e"}}>{a.label}</div>
-                  <div style={{fontSize:"11px",color:"#e2e8f0",fontWeight:600}}>{a.desc}</div>
-                </div>
-                {a.earned&&<span style={{marginLeft:"auto",fontSize:"16px"}}>✅</span>}
-              </div>
-            ))}
-          </div>
-        </div>
+        <h2 style={{fontSize:"32px",fontWeight:900,color:"#f0f6fc",marginBottom:"8px"}}>Game Over!</h2>
+        <p style={{color:"#e2e8f0",fontWeight:700,fontSize:"16px"}}>
+          Final rankings are shown on the host screen.
+        </p>
       </div>
     </div>
   );
@@ -3259,7 +3034,7 @@ const FinalScreen = ({viewMode,choices,players,yourMoney,playerId,companyName}:{
         })}
       </div>
 
-      {podiumOrder.length === 0 && (
+      {sorted.length === 0 && (
         <div style={{color:"#e2e8f0",fontWeight:700,fontSize:"16px",textAlign:"center"}}>
           No player results are available yet.
         </div>
