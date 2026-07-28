@@ -1152,7 +1152,9 @@ const LeaderboardScreen = ({round,viewMode,companyName,players,playerId}:{round:
   }
 
   // Host: podium + list
-  const podiumOrder = sorted.slice(0,3);
+  // Display the podium visually as 2nd, 1st, 3rd while preserving
+  // the leaderboard's descending rank order everywhere else.
+  const podiumOrder = [sorted[1], sorted[0], sorted[2]].filter(Boolean);
   const podiumRank  = [2,1,3];
   const podiumH     = ["100px","140px","80px"];
 
@@ -1728,7 +1730,7 @@ export default function App() {
       case "leaderboard":
         return <LeaderboardScreen round={r} viewMode={selectedViewMode} companyName={companyName} players={players} playerId={playerId} />;
       case "final":
-        return <LeaderboardScreen round={5} viewMode="host" companyName={companyName} players={players} playerId={playerId} />;
+        return <FinalScreen viewMode={selectedViewMode} choices={choices} players={players} yourMoney={yourMoney} playerValue={playerValue} playerId={playerId} companyName={companyName} />;
       default:
         return null;
     }
